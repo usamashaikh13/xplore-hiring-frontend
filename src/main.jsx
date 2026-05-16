@@ -8,10 +8,12 @@ import {
   CircleAlert,
   FileText,
   GitBranch,
+  LayoutDashboard,
   Loader2,
   MailCheck,
   RefreshCcw,
   Send,
+  Settings2,
   UserRound,
   UsersRound
 } from 'lucide-react';
@@ -111,6 +113,7 @@ function safeJson(text) {
 }
 
 function App() {
+  const [activePage, setActivePage] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   const [log, setLog] = useState([]);
   const [dashboard, setDashboard] = useState(null);
@@ -320,50 +323,50 @@ function App() {
     });
   }
 
-  return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brandMark">X</div>
-          <div>
-            <strong>Xplore</strong>
-            <span>Hiring Console</span>
-          </div>
-        </div>
-        <nav>
-          {['Dashboard', 'Setup', 'Pipeline', 'Interviews', 'Offers', 'Analytics'].map((item) => (
-            <a href={`#${item.toLowerCase()}`} key={item}>{item}</a>
-          ))}
-        </nav>
-        <button className="primary full" onClick={refreshAll} disabled={loading}>
-          {loading ? <Loader2 className="spin" size={16} /> : <RefreshCcw size={16} />}
-          Refresh
-        </button>
-      </aside>
+  const pages = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'setup', label: 'Setup', icon: Settings2 },
+    { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
+    { id: 'interviews', label: 'Interviews', icon: CalendarClock },
+    { id: 'offers', label: 'Offers', icon: MailCheck },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'activity', label: 'Activity', icon: FileText }
+  ];
 
-      <main className="main">
-        <header className="topbar">
-          <div>
-            <h1>Hiring Operations</h1>
-            <p>Run the full candidate-to-offer flow against the local services.</p>
-          </div>
-          <div className="serviceState">
-            <span><CheckCircle2 size={16} /> Interviewer 8081</span>
-            <span><CheckCircle2 size={16} /> Recruitment 8082</span>
-          </div>
-        </header>
+  const pageCopy = {
+    dashboard: ['Dashboard', 'Current hiring health across both services.'],
+    setup: ['Setup', 'Create the core records needed before running a hiring flow.'],
+    pipeline: ['Pipeline', 'Move a candidate from application to scheduled interview and feedback.'],
+    interviews: ['Interviews', 'Review interview slots and recruitment records.'],
+    offers: ['Offers', 'Create, send, and accept offers tied to applications.'],
+    analytics: ['Analytics', 'Inspect funnel, offer acceptance, and platform events.'],
+    activity: ['Activity', 'Recent frontend operations and API outcomes.']
+  };
 
-        <section className="stats" id="dashboard">
-          {stats.map(({ label, value, icon: Icon }) => (
-            <div className="metric" key={label}>
-              <Icon size={18} />
-              <span>{label}</span>
-              <strong>{value}</strong>
-            </div>
-          ))}
-        </section>
+  function renderPage() {
+    if (activePage === 'dashboard') {
+      return (
+        <>
+          <section className="stats">
+            {stats.map(({ label, value, icon: Icon }) => (
+              <div className="metric" key={label}>
+                <Icon size={18} />
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </section>
+          <section className="grid two">
+            <DataTable title="Applications" rows={applications} columns={['id', 'candidateId', 'jobId', 'stage']} />
+            <DataTable title="Offers" rows={offers} columns={['id', 'candidateId', 'status', 'salary']} />
+          </section>
+        </>
+      );
+    }
 
-        <section className="grid two" id="setup">
+    if (activePage === 'setup') {
+      return (
+        <section className="grid two">
           <Panel title="Candidate" icon={UserRound} action="Create" onAction={createCandidate}>
             <Form data={candidateForm} setData={setCandidateForm} fields={[
               ['name', 'Name'], ['email', 'Email'], ['phone', 'Phone'], ['currentCompany', 'Company'],
@@ -371,7 +374,6 @@ function App() {
               ['tags', 'Tags'], ['resumeUrl', 'Resume URL'], ['source', 'Source']
             ]} />
           </Panel>
-
           <Panel title="Job Opening" icon={BriefcaseBusiness} action="Create" onAction={createJob}>
             <Form data={jobForm} setData={setJobForm} fields={[
               ['title', 'Title'], ['department', 'Department'], ['location', 'Location'], ['employmentType', 'Type'],
@@ -379,14 +381,12 @@ function App() {
               ['salaryRange', 'Salary'], ['headcount', 'Headcount'], ['status', 'Status']
             ]} />
           </Panel>
-
           <Panel title="Interviewer" icon={UsersRound} action="Create" onAction={createInterviewer}>
             <Form data={interviewerForm} setData={setInterviewerForm} fields={[
               ['name', 'Name'], ['email', 'Email'], ['phone', 'Phone'], ['technicalSkills', 'Skills'],
               ['yearsExperience', 'Experience'], ['designation', 'Designation'], ['department', 'Department']
             ]} />
           </Panel>
-
           <Panel title="Interview Slot" icon={CalendarClock} action="Create" onAction={createSlot}>
             <Form data={slotForm} setData={setSlotForm} fields={[
               ['interviewerId', 'Interviewer ID'], ['interviewerName', 'Interviewer'], ['technicalSkills', 'Skills'],
@@ -394,8 +394,12 @@ function App() {
             ]} />
           </Panel>
         </section>
+      );
+    }
 
-        <section className="workflow" id="pipeline">
+    if (activePage === 'pipeline') {
+      return (
+        <section className="pageStack">
           <Panel title="Pipeline Actions" icon={GitBranch}>
             <div className="selectorRow">
               <Select label="Candidate" value={selected.candidateId} onChange={(candidateId) => setSelected({ ...selected, candidateId })} items={candidates} />
@@ -411,9 +415,26 @@ function App() {
               <button onClick={markNoShow}><CircleAlert size={16} /> No-show</button>
             </div>
           </Panel>
+          <div className="grid two">
+            <DataTable title="Applications" rows={applications} columns={['id', 'candidateId', 'jobId', 'stage']} />
+            <DataTable title="Recruitments" rows={recruitments} columns={['id', 'candidateId', 'interviewerId', 'interviewSlotId', 'status']} />
+          </div>
         </section>
+      );
+    }
 
-        <section className="grid two" id="offers">
+    if (activePage === 'interviews') {
+      return (
+        <section className="grid two">
+          <DataTable title="Slots" rows={slots} columns={['id', 'interviewerName', 'round', 'status', 'bookedCandidateId']} />
+          <DataTable title="Recruitments" rows={recruitments} columns={['id', 'candidateId', 'interviewerId', 'interviewSlotId', 'status']} />
+        </section>
+      );
+    }
+
+    if (activePage === 'offers') {
+      return (
+        <section className="grid two">
           <Panel title="Offer" icon={MailCheck} action="Create" onAction={createOffer}>
             <Form data={offerForm} setData={setOfferForm} fields={[
               ['title', 'Title'], ['salary', 'Salary'], ['currency', 'Currency'], ['joiningDate', 'Joining Date'],
@@ -424,41 +445,89 @@ function App() {
               <button onClick={() => updateOffer('ACCEPTED')}><CheckCircle2 size={16} /> Accept</button>
             </div>
           </Panel>
-
-          <Panel title="Activity" icon={BarChart3}>
-            <div className="log">
-              {log.map((item, index) => (
-                <div className={`logItem ${item.type}`} key={`${item.time}-${index}`}>
-                  <span>{item.time}</span>
-                  <p>{item.message}</p>
-                </div>
-              ))}
-              {!log.length && <p className="muted">No activity yet.</p>}
-            </div>
-          </Panel>
+          <DataTable title="Offers" rows={offers} columns={['id', 'applicationId', 'candidateId', 'status', 'salary']} />
         </section>
+      );
+    }
 
-        <section className="grid two" id="analytics">
-          <DataTable title="Applications" rows={applications} columns={['id', 'candidateId', 'jobId', 'stage']} />
-          <DataTable title="Slots" rows={slots} columns={['id', 'interviewerName', 'round', 'status', 'bookedCandidateId']} />
-          <DataTable title="Offers" rows={offers} columns={['id', 'candidateId', 'status', 'salary']} />
+    if (activePage === 'analytics') {
+      return (
+        <section className="pageStack">
+          <section className="analyticsStrip">
+            <div>
+              <span>Offer Acceptance</span>
+              <strong>{Number(analytics?.offerAcceptanceRate || 0).toFixed(1)}%</strong>
+            </div>
+            <div>
+              <span>Avg Time To Hire</span>
+              <strong>{analytics?.averageTimeToHireDays ?? 'N/A'}</strong>
+            </div>
+            <div>
+              <span>Funnel</span>
+              <strong>{Object.values(analytics?.funnelByStage || {}).reduce((sum, value) => sum + value, 0)}</strong>
+            </div>
+          </section>
           <DataTable title="Webhook Events" rows={events} columns={['id', 'eventType', 'aggregateType', 'aggregateId']} />
         </section>
+      );
+    }
 
-        <section className="analyticsStrip">
+    return (
+      <Panel title="Activity" icon={BarChart3}>
+        <div className="log">
+          {log.map((item, index) => (
+            <div className={`logItem ${item.type}`} key={`${item.time}-${index}`}>
+              <span>{item.time}</span>
+              <p>{item.message}</p>
+            </div>
+          ))}
+          {!log.length && <p className="muted">No activity yet.</p>}
+        </div>
+      </Panel>
+    );
+  }
+
+  return (
+    <div className="shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brandMark">X</div>
           <div>
-            <span>Offer Acceptance</span>
-            <strong>{Number(analytics?.offerAcceptanceRate || 0).toFixed(1)}%</strong>
+            <strong>Xplore</strong>
+            <span>Hiring Console</span>
           </div>
+        </div>
+        <nav>
+          {pages.map(({ id, label, icon: Icon }) => (
+            <button
+              className={activePage === id ? 'navItem active' : 'navItem'}
+              key={id}
+              onClick={() => setActivePage(id)}
+            >
+              <Icon size={16} />
+              {label}
+            </button>
+          ))}
+        </nav>
+        <button className="primary full" onClick={refreshAll} disabled={loading}>
+          {loading ? <Loader2 className="spin" size={16} /> : <RefreshCcw size={16} />}
+          Refresh
+        </button>
+      </aside>
+
+      <main className="main">
+        <header className="topbar">
           <div>
-            <span>Avg Time To Hire</span>
-            <strong>{analytics?.averageTimeToHireDays ?? 'N/A'}</strong>
+            <h1>{pageCopy[activePage][0]}</h1>
+            <p>{pageCopy[activePage][1]}</p>
           </div>
-          <div>
-            <span>Funnel</span>
-            <strong>{Object.values(analytics?.funnelByStage || {}).reduce((sum, value) => sum + value, 0)}</strong>
+          <div className="serviceState">
+            <span><CheckCircle2 size={16} /> Interviewer 8081</span>
+            <span><CheckCircle2 size={16} /> Recruitment 8082</span>
           </div>
-        </section>
+        </header>
+
+        {renderPage()}
       </main>
     </div>
   );
