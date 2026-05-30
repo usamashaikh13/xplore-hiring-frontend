@@ -113,6 +113,7 @@ const roleProfiles = {
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: Gauge },
+  { id: 'operations', label: 'Operations', icon: CalendarCheck, entitlement: ENTITLEMENTS.SCHEDULE_INTERVIEWS },
   { id: 'opportunities', label: 'Opportunities', icon: BriefcaseBusiness, entitlement: ENTITLEMENTS.VIEW_JOBS },
   { id: 'learning', label: 'Learning Hub', icon: GraduationCap, entitlement: ENTITLEMENTS.VIEW_LEARNING },
   { id: 'resume', label: 'Resume Builder', icon: FileText, entitlement: ENTITLEMENTS.BUILD_RESUME },
@@ -542,6 +543,7 @@ function PageRouter({ activePage, can, profile, data, runBackendAction }) {
 
   const pages = {
     dashboard: <Dashboard profile={profile} data={data} />,
+    operations: <BackendOperations data={data} runBackendAction={runBackendAction} />,
     opportunities: <OpportunityExplorer can={can} data={data} runBackendAction={runBackendAction} />,
     learning: <LearningHub />,
     resume: <ResumeBuilder />,
@@ -671,6 +673,264 @@ function OpportunityExplorer({ can, data, runBackendAction }) {
           </article>
         ))}
       </section>
+    </div>
+  );
+}
+
+function BackendOperations({ data, runBackendAction }) {
+  const [candidate, setCandidate] = useState({
+    name: 'Rahul Sharma',
+    email: `rahul.${Date.now()}@example.com`,
+    phone: `88${String(Date.now()).slice(-8)}`,
+    currentDesignation: 'Software Engineer',
+    yearsExperience: '4.5',
+    skills: 'Java, Spring Boot, SQL',
+    tags: 'priority, referral',
+    source: 'Xplore UI'
+  });
+  const [job, setJob] = useState({
+    title: 'Backend Engineer',
+    department: 'Engineering',
+    location: 'Mumbai',
+    employmentType: 'Full-time',
+    minExperience: '3',
+    maxExperience: '7',
+    requiredSkills: 'Java, Spring Boot, SQL',
+    salaryRange: '18-28 LPA',
+    headcount: '2',
+    status: 'OPEN'
+  });
+  const [interviewer, setInterviewer] = useState({
+    name: 'Alice Johnson',
+    email: `alice.${Date.now()}@example.com`,
+    phone: `99${String(Date.now()).slice(-8)}`,
+    technicalSkills: 'Java, Spring Boot, React',
+    yearsExperience: '6',
+    designation: 'Senior Engineer',
+    department: 'Engineering'
+  });
+  const [slot, setSlot] = useState({
+    interviewerId: '1',
+    interviewerName: 'Alice Johnson',
+    technicalSkills: 'Java, Spring Boot, React',
+    minYearsExperience: '3',
+    startTime: '2026-06-05T10:00:00',
+    endTime: '2026-06-05T11:00:00',
+    round: 'L1',
+    meetingLink: 'https://meet.example.com/xplore',
+    status: 'AVAILABLE'
+  });
+  const [selection, setSelection] = useState({
+    candidateId: '',
+    jobId: '',
+    applicationId: '',
+    recruitmentId: '',
+    offerId: ''
+  });
+  const [timeline, setTimeline] = useState(null);
+  const [prepPacket, setPrepPacket] = useState(null);
+
+  function split(value) {
+    return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
+  }
+
+  const selectedApplication = data.applications.find((item) => item.id === Number(selection.applicationId));
+  const selectedRecruitment = data.recruitments.find((item) => item.id === Number(selection.recruitmentId));
+
+  async function createCandidate() {
+    const created = await api(recruitmentBase, '/api/candidates', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...candidate,
+        yearsExperience: Number(candidate.yearsExperience),
+        skills: split(candidate.skills),
+        tags: split(candidate.tags)
+      })
+    });
+    setSelection((current) => ({ ...current, candidateId: created.id }));
+  }
+
+  async function createJob() {
+    const created = await api(recruitmentBase, '/api/jobs', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...job,
+        minExperience: Number(job.minExperience),
+        maxExperience: Number(job.maxExperience),
+        headcount: Number(job.headcount),
+        requiredSkills: split(job.requiredSkills),
+        hiringManagerId: 1,
+        recruiterId: 10
+      })
+    });
+    setSelection((current) => ({ ...current, jobId: created.id }));
+  }
+
+  async function createInterviewer() {
+    const created = await api(interviewerBase, '/api/interviewers', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...interviewer,
+        yearsExperience: Number(interviewer.yearsExperience),
+        technicalSkills: split(interviewer.technicalSkills)
+      })
+    });
+    setSlot((current) => ({ ...current, interviewerId: created.id, interviewerName: created.name }));
+  }
+
+  async function createSlot() {
+    await api(interviewerBase, '/api/slots', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...slot,
+        interviewerId: Number(slot.interviewerId),
+        minYearsExperience: Number(slot.minYearsExperience),
+        technicalSkills: split(slot.technicalSkills)
+      })
+    });
+  }
+
+  async function createApplication() {
+    const created = await api(recruitmentBase, '/api/applications', {
+      method: 'POST',
+      body: JSON.stringify({
+        candidateId: Number(selection.candidateId || data.candidates[0]?.id),
+        jobId: Number(selection.jobId || data.jobs[0]?.id),
+        source: 'Xplore Operations',
+        ownerRecruiterId: 10,
+        screeningNotes: 'Created from backend operations workspace'
+      })
+    });
+    setSelection((current) => ({ ...current, applicationId: created.id }));
+  }
+
+  async function updateApplicationStage(stage) {
+    await api(recruitmentBase, `/api/applications/${selection.applicationId}/stage`, {
+      method: 'PATCH',
+      body: JSON.stringify({ stage, notes: `Moved to ${stage} from Xplore UI` })
+    });
+  }
+
+  async function scheduleInterview() {
+    const app = selectedApplication || data.applications[0];
+    const targetJob = data.jobs.find((item) => item.id === app?.jobId) || data.jobs[0];
+    const created = await api(recruitmentBase, '/api/recruitments/schedule', {
+      method: 'POST',
+      body: JSON.stringify({
+        candidateId: app?.candidateId || Number(selection.candidateId || data.candidates[0]?.id),
+        applicationId: app?.id || Number(selection.applicationId),
+        requiredSkills: targetJob?.requiredSkills?.slice(0, 2) || ['Java', 'Spring Boot'],
+        minYearsExperience: targetJob?.minExperience || 3,
+        round: 'L1'
+      })
+    });
+    setSelection((current) => ({ ...current, recruitmentId: created.id }));
+  }
+
+  async function submitFeedback() {
+    const rec = selectedRecruitment || data.recruitments[0];
+    await api(interviewerBase, '/api/feedback', {
+      method: 'POST',
+      body: JSON.stringify({
+        interviewSlotId: rec.interviewSlotId,
+        interviewerId: rec.interviewerId,
+        candidateId: rec.candidateId,
+        recruitmentId: rec.id,
+        technicalRating: 4,
+        communicationRating: 4,
+        problemSolvingRating: 5,
+        overallRating: 4,
+        recommendation: 'HIRE',
+        strengths: 'Strong backend fundamentals',
+        weaknesses: 'Can deepen system design examples',
+        detailedComments: 'Good fit for the role.'
+      })
+    });
+  }
+
+  async function createOffer() {
+    const app = selectedApplication || data.applications[0];
+    const created = await api(recruitmentBase, '/api/offers', {
+      method: 'POST',
+      body: JSON.stringify({
+        applicationId: app.id,
+        candidateId: app.candidateId,
+        jobId: app.jobId,
+        title: 'Backend Engineer',
+        salary: 1500000,
+        currency: 'INR',
+        joiningDate: '2026-06-15',
+        expiresAt: '2026-06-01T18:00:00',
+        status: 'DRAFT',
+        notes: 'Created from Xplore UI'
+      })
+    });
+    setSelection((current) => ({ ...current, offerId: created.id }));
+  }
+
+  async function updateOffer(status) {
+    await api(recruitmentBase, `/api/offers/${selection.offerId}/status?status=${status}`, { method: 'PATCH' });
+  }
+
+  async function loadTimeline() {
+    const value = await api(recruitmentBase, `/api/candidates/${selection.candidateId}/timeline`);
+    setTimeline(value);
+  }
+
+  async function loadPrepPacket() {
+    const value = await api(recruitmentBase, `/api/recruitments/${selection.recruitmentId}/prep-packet`);
+    setPrepPacket(value);
+  }
+
+  return (
+    <div className="pageStack">
+      <section className="dashboardGrid">
+        <BackendForm title="Candidate" icon={UserRound} data={candidate} setData={setCandidate} fields={['name', 'email', 'phone', 'currentDesignation', 'yearsExperience', 'skills', 'tags', 'source']} action="Create Candidate" onAction={() => runBackendAction('Candidate created', createCandidate)} />
+        <BackendForm title="Job" icon={BriefcaseBusiness} data={job} setData={setJob} fields={['title', 'department', 'location', 'employmentType', 'minExperience', 'maxExperience', 'requiredSkills', 'salaryRange', 'headcount', 'status']} action="Create Job" onAction={() => runBackendAction('Job created', createJob)} />
+        <BackendForm title="Interviewer" icon={UsersRound} data={interviewer} setData={setInterviewer} fields={['name', 'email', 'phone', 'technicalSkills', 'yearsExperience', 'designation', 'department']} action="Create Interviewer" onAction={() => runBackendAction('Interviewer created', createInterviewer)} />
+      </section>
+
+      <section className="dashboardGrid">
+        <BackendForm title="Slot" icon={CalendarCheck} data={slot} setData={setSlot} fields={['interviewerId', 'interviewerName', 'technicalSkills', 'minYearsExperience', 'startTime', 'endTime', 'round', 'meetingLink', 'status']} action="Create Slot" onAction={() => runBackendAction('Slot created', createSlot)} />
+        <Panel title="Selections" icon={Fingerprint}>
+          <div className="opsGrid">
+            <EntitySelect label="Candidate" value={selection.candidateId} items={data.candidates} onChange={(candidateId) => setSelection({ ...selection, candidateId })} labelKey="name" />
+            <EntitySelect label="Job" value={selection.jobId} items={data.jobs} onChange={(jobId) => setSelection({ ...selection, jobId })} labelKey="title" />
+            <EntitySelect label="Application" value={selection.applicationId} items={data.applications} onChange={(applicationId) => setSelection({ ...selection, applicationId })} labelKey="stage" />
+            <EntitySelect label="Recruitment" value={selection.recruitmentId} items={data.recruitments} onChange={(recruitmentId) => setSelection({ ...selection, recruitmentId })} labelKey="status" />
+            <EntitySelect label="Offer" value={selection.offerId} items={data.offers} onChange={(offerId) => setSelection({ ...selection, offerId })} labelKey="status" />
+          </div>
+        </Panel>
+        <Panel title="Workflow Actions" icon={Sparkles}>
+          <div className="quickActions">
+            <button onClick={() => runBackendAction('Application created', createApplication)}>Create Application</button>
+            <button onClick={() => runBackendAction('Application shortlisted', () => updateApplicationStage('SHORTLISTED'))}>Shortlist</button>
+            <button onClick={() => runBackendAction('Interview scheduled', scheduleInterview)}>Schedule Interview</button>
+            <button onClick={() => runBackendAction('Feedback submitted', submitFeedback)}>Submit Feedback</button>
+            <button onClick={() => runBackendAction('Offer created', createOffer)}>Create Offer</button>
+            <button onClick={() => runBackendAction('Offer sent', () => updateOffer('SENT'))}>Send Offer</button>
+            <button onClick={() => runBackendAction('Offer accepted', () => updateOffer('ACCEPTED'))}>Accept Offer</button>
+            <button onClick={() => runBackendAction('Timeline loaded', loadTimeline)}>Load Timeline</button>
+            <button onClick={() => runBackendAction('Prep packet loaded', loadPrepPacket)}>Load Prep Packet</button>
+          </div>
+        </Panel>
+      </section>
+
+      <section className="dashboardGrid">
+        <DataTable title="Candidates" rows={data.candidates} columns={['id', 'name', 'email', 'phone']} />
+        <DataTable title="Jobs" rows={data.jobs} columns={['id', 'title', 'status', 'headcount']} />
+        <DataTable title="Applications" rows={data.applications} columns={['id', 'candidateId', 'jobId', 'stage']} />
+        <DataTable title="Recruitments" rows={data.recruitments} columns={['id', 'candidateId', 'interviewerId', 'interviewSlotId', 'status']} />
+        <DataTable title="Offers" rows={data.offers} columns={['id', 'applicationId', 'candidateId', 'status']} />
+        <DataTable title="Slots" rows={data.slots} columns={['id', 'interviewerName', 'round', 'status', 'bookedCandidateId']} />
+      </section>
+
+      {(timeline || prepPacket) && (
+        <section className="dashboardGrid">
+          <JsonPanel title="Candidate Timeline" value={timeline} />
+          <JsonPanel title="Prep Packet" value={prepPacket} />
+        </section>
+      )}
     </div>
   );
 }
@@ -940,6 +1200,47 @@ function Panel({ title, icon: Icon, children }) {
       </div>
       {children}
     </section>
+  );
+}
+
+function BackendForm({ title, icon, data, setData, fields, action, onAction }) {
+  const Icon = icon;
+  return (
+    <Panel title={title} icon={Icon}>
+      <div className="opsGrid">
+        {fields.map((field) => (
+          <label className="field" key={field}>
+            <span>{field}</span>
+            <input value={data[field] ?? ''} onChange={(event) => setData({ ...data, [field]: event.target.value })} />
+          </label>
+        ))}
+      </div>
+      <button className="primaryButton opsAction" onClick={onAction}>{action}</button>
+    </Panel>
+  );
+}
+
+function EntitySelect({ label, value, items, onChange, labelKey }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Select {label}</option>
+        {items.map((item) => (
+          <option value={item.id} key={item.id}>
+            #{item.id} {item[labelKey] || item.title || item.name || item.status || item.email}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function JsonPanel({ title, value }) {
+  return (
+    <Panel title={title} icon={FileText}>
+      <pre className="jsonPanel">{JSON.stringify(value, null, 2)}</pre>
+    </Panel>
   );
 }
 
