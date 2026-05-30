@@ -476,6 +476,36 @@ nav {
   padding: 0 10px;
 }
 
+.backendPill,
+.toast {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--button);
+  color: var(--muted);
+}
+
+.backendPill.online {
+  color: var(--good);
+}
+
+.backendPill.offline {
+  color: var(--danger);
+}
+
+.toast {
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 14px;
+  margin-bottom: 14px;
+  color: var(--text);
+}
+
 .searchBox input {
   border: 0;
   background: transparent;
@@ -854,6 +884,29 @@ nav {
 
 .componentGrid {
   gap: 9px;
+}
+
+.tableWrap {
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  color: var(--muted);
+  font-weight: 800;
 }
 
 .state.success { color: var(--good); }

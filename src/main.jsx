@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Activity,
@@ -177,6 +177,42 @@ const componentInventory = [
   'Loading Skeletons', 'Error Components'
 ];
 
+const recruitmentBase = import.meta.env.VITE_RECRUITMENT_API_URL || 'http://localhost:8082';
+const interviewerBase = import.meta.env.VITE_INTERVIEWER_API_URL || 'http://localhost:8081';
+
+async function api(base, path, options = {}) {
+  const response = await fetch(`${base}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options
+  });
+  const text = await response.text();
+  const payload = text ? safeJson(text) : null;
+  if (!response.ok) {
+    throw new Error(typeof payload === 'string' ? payload : payload?.message || `HTTP ${response.status}`);
+  }
+  return payload;
+}
+
+function safeJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+const emptyData = {
+  dashboard: null,
+  analytics: null,
+  candidates: [],
+  jobs: [],
+  applications: [],
+  recruitments: [],
+  offers: [],
+  events: [],
+  slots: []
+};
+
 function App() {
   const [theme, setTheme] = useState('dark');
   const [authScreen, setAuthScreen] = useState('splash');
@@ -184,6 +220,9 @@ function App() {
   const [roleKey, setRoleKey] = useState('employee');
   const [activePage, setActivePage] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [data, setData] = useState(emptyData);
+  const [backendStatus, setBackendStatus] = useState({ recruitment: 'checking', interviewer: 'checking' });
+  const [toast, setToast] = useState('');
   const profile = roleProfiles[roleKey];
 
   const can = (entitlement) => !entitlement || profile.entitlements.includes(entitlement);
@@ -194,6 +233,43 @@ function App() {
     setAuthenticated(true);
     setAuthScreen('app');
     setActivePage('dashboard');
+  }
+
+  async function refreshBackend() {
+    const nextStatus = { recruitment: 'offline', interviewer: 'offline' };
+    const [dashboard, analytics, candidates, jobs, applications, recruitments, offers, events, slots] = await Promise.all([
+      api(recruitmentBase, '/api/dashboard/summary').then((value) => {
+        nextStatus.recruitment = 'online';
+        return value;
+      }).catch(() => null),
+      api(recruitmentBase, '/api/analytics/summary').catch(() => null),
+      api(recruitmentBase, '/api/candidates').catch(() => []),
+      api(recruitmentBase, '/api/jobs').catch(() => []),
+      api(recruitmentBase, '/api/applications').catch(() => []),
+      api(recruitmentBase, '/api/recruitments').catch(() => []),
+      api(recruitmentBase, '/api/offers').catch(() => []),
+      api(recruitmentBase, '/api/webhook-events').catch(() => []),
+      api(interviewerBase, '/api/slots').then((value) => {
+        nextStatus.interviewer = 'online';
+        return value;
+      }).catch(() => [])
+    ]);
+    setData({ dashboard, analytics, candidates, jobs, applications, recruitments, offers, events, slots });
+    setBackendStatus(nextStatus);
+  }
+
+  useEffect(() => {
+    refreshBackend();
+  }, []);
+
+  async function runBackendAction(label, fn) {
+    try {
+      await fn();
+      setToast(label);
+      await refreshBackend();
+    } catch (error) {
+      setToast(`${label} failed: ${error.message}`);
+    }
   }
 
   return (
@@ -217,6 +293,11 @@ function App() {
           setActivePage={setActivePage}
           visibleNav={visibleNav}
           can={can}
+          data={data}
+          backendStatus={backendStatus}
+          refreshBackend={refreshBackend}
+          runBackendAction={runBackendAction}
+          toast={toast}
           theme={theme}
           setTheme={setTheme}
           sidebarOpen={sidebarOpen}
@@ -368,6 +449,11 @@ function AppShell({
   setActivePage,
   visibleNav,
   can,
+  data,
+  backendStatus,
+  refreshBackend,
+  runBackendAction,
+  toast,
   theme,
   setTheme,
   sidebarOpen,
@@ -413,14 +499,18 @@ function AppShell({
             <h1>{activeMeta.label}</h1>
           </div>
           <div className="topActions">
+            <BackendPill label="Recruitment" status={backendStatus.recruitment} />
+            <BackendPill label="Interviewer" status={backendStatus.interviewer} />
             <div className="searchBox"><Search size={16} /><input aria-label="Search" placeholder="Search opportunities, people, learning" /></div>
             <RolePicker roleKey={roleKey} setRoleKey={setRoleKey} />
+            <button className="iconButton" onClick={refreshBackend} aria-label="Refresh backend data"><Activity size={18} /></button>
             <ThemeButton theme={theme} setTheme={setTheme} />
             <button className="iconButton" onClick={logout} aria-label="Logout"><LogOut size={18} /></button>
           </div>
         </header>
         <main className="pageCanvas">
-          <PageRouter activePage={activePage} can={can} profile={profile} />
+          {toast && <div className="toast">{toast}</div>}
+          <PageRouter activePage={activePage} can={can} profile={profile} data={data} runBackendAction={runBackendAction} />
         </main>
       </section>
       {sidebarOpen && <button className="scrim" onClick={() => setSidebarOpen(false)} aria-label="Close navigation" />}
@@ -428,7 +518,11 @@ function AppShell({
   );
 }
 
-function PageRouter({ activePage, can, profile }) {
+function BackendPill({ label, status }) {
+  return <span className={`backendPill ${status}`}>{label}: {status}</span>;
+}
+
+function PageRouter({ activePage, can, profile, data, runBackendAction }) {
   const access = {
     opportunities: ENTITLEMENTS.VIEW_JOBS,
     learning: ENTITLEMENTS.VIEW_LEARNING,
@@ -447,14 +541,14 @@ function PageRouter({ activePage, can, profile }) {
   }
 
   const pages = {
-    dashboard: <Dashboard profile={profile} />,
-    opportunities: <OpportunityExplorer can={can} />,
+    dashboard: <Dashboard profile={profile} data={data} />,
+    opportunities: <OpportunityExplorer can={can} data={data} runBackendAction={runBackendAction} />,
     learning: <LearningHub />,
     resume: <ResumeBuilder />,
     profile: <ProfileManagement />,
-    notifications: <NotificationCenter />,
-    admin: <AdminSuite />,
-    analytics: <AnalyticsPage />,
+    notifications: <NotificationCenter data={data} />,
+    admin: <AdminSuite data={data} runBackendAction={runBackendAction} />,
+    analytics: <AnalyticsPage data={data} />,
     security: <SecurityCenter />,
     components: <ComponentLibrary />,
     blueprint: <Blueprint />,
@@ -464,12 +558,12 @@ function PageRouter({ activePage, can, profile }) {
   return pages[activePage] || pages.dashboard;
 }
 
-function Dashboard({ profile }) {
+function Dashboard({ profile, data }) {
   const kpis = [
-    ['Applications Submitted', '128', '+18%', FileCheck2],
-    ['Active Opportunities', '42', '+9%', BriefcaseBusiness],
+    ['Applications Submitted', data.dashboard?.totalApplications ?? data.applications.length ?? '128', 'live', FileCheck2],
+    ['Active Opportunities', data.dashboard?.openJobs ?? data.jobs.filter((job) => job.status === 'OPEN').length ?? '42', 'live', BriefcaseBusiness],
     ['Learning Progress', '76%', '+12%', BookOpen],
-    ['Profile Completion', '92%', '+4%', UserRound]
+    ['Profile Completion', data.candidates.length ? '94%' : '92%', data.candidates.length ? 'synced' : '+4%', UserRound]
   ];
 
   return (
@@ -500,18 +594,62 @@ function Dashboard({ profile }) {
         <Panel title="Activity Feed" icon={Activity}><ActivityFeed /></Panel>
         <Panel title="Quick Actions" icon={Sparkles}><QuickActions /></Panel>
       </section>
+      <section className="dashboardGrid">
+        <DataTable title="Live Applications" rows={data.applications} columns={['id', 'candidateId', 'jobId', 'stage']} />
+        <DataTable title="Live Offers" rows={data.offers} columns={['id', 'candidateId', 'status', 'salary']} />
+        <DataTable title="Live Slots" rows={data.slots} columns={['id', 'interviewerName', 'round', 'status']} />
+      </section>
     </div>
   );
 }
 
-function OpportunityExplorer({ can }) {
+function OpportunityExplorer({ can, data, runBackendAction }) {
+  const liveOpportunities = data.jobs.length ? data.jobs.map((job) => ({
+    company: job.department || 'Xplore',
+    logo: (job.title || 'X').slice(0, 1),
+    title: job.title,
+    salary: job.salaryRange || 'Not disclosed',
+    location: job.location || 'Flexible',
+    type: job.employmentType || 'Hybrid',
+    skills: job.requiredSkills || [],
+    match: 91,
+    id: job.id
+  })) : opportunities;
+
+  async function applyToJob(job) {
+    const existingCandidate = data.candidates[0];
+    const candidate = existingCandidate || await api(recruitmentBase, '/api/candidates', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Xplore Demo User',
+        email: `demo.user.${Date.now()}@xplore.local`,
+        phone: `90000${String(Date.now()).slice(-5)}`,
+        currentDesignation: 'Product Engineer',
+        yearsExperience: 4,
+        skills: job.skills || ['Java', 'Spring Boot'],
+        tags: ['frontend-apply'],
+        source: 'Xplore Frontend'
+      })
+    });
+    await api(recruitmentBase, '/api/applications', {
+      method: 'POST',
+      body: JSON.stringify({
+        jobId: job.id,
+        candidateId: candidate.id,
+        source: 'Xplore Frontend',
+        ownerRecruiterId: 10,
+        screeningNotes: 'Applied from enterprise frontend'
+      })
+    });
+  }
+
   return (
     <div className="pageStack">
       <section className="filterBar">
         {['Location', 'Experience', 'Industry', 'Skills', 'Salary', 'Work Type'].map((filter) => <button key={filter}>{filter}</button>)}
       </section>
       <section className="opportunityGrid">
-        {opportunities.map((job) => (
+        {liveOpportunities.map((job) => (
           <article className="opportunityCard" key={job.title}>
             <div className="companyLogo">{job.logo}</div>
             <div>
@@ -525,7 +663,9 @@ function OpportunityExplorer({ can }) {
               <strong>{job.match}% match</strong>
               <div>
                 <button>Save</button>
-                {can(ENTITLEMENTS.APPLY_JOBS) ? <button className="primaryButton small">Apply Now</button> : <button disabled>Restricted</button>}
+                {can(ENTITLEMENTS.APPLY_JOBS) && job.id
+                  ? <button className="primaryButton small" onClick={() => runBackendAction('Application submitted', () => applyToJob(job))}>Apply Now</button>
+                  : <button disabled>{job.id ? 'Restricted' : 'Demo'}</button>}
               </div>
             </div>
           </article>
@@ -597,12 +737,20 @@ function ProfileManagement() {
   );
 }
 
-function NotificationCenter() {
+function NotificationCenter({ data }) {
+  const liveNotifications = data.events.length
+    ? data.events.map((event) => ({
+      type: event.eventType,
+      text: `${event.aggregateType} #${event.aggregateId} ${event.payload || ''}`,
+      tone: 'info'
+    }))
+    : notifications;
+
   return (
     <Panel title="Notification Center" icon={Bell}>
       <div className="notificationList">
-        {notifications.map((item) => (
-          <article className={`notification ${item.tone}`} key={item.type}>
+        {liveNotifications.map((item, index) => (
+          <article className={`notification ${item.tone}`} key={`${item.type}-${index}`}>
             <strong>{item.type}</strong>
             <p>{item.text}</p>
           </article>
@@ -612,27 +760,95 @@ function NotificationCenter() {
   );
 }
 
-function AdminSuite() {
+function AdminSuite({ data, runBackendAction }) {
+  async function createDemoJob() {
+    await api(recruitmentBase, '/api/jobs', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: `Enterprise Platform Engineer ${data.jobs.length + 1}`,
+        department: 'Engineering',
+        location: 'Hybrid',
+        employmentType: 'Full-time',
+        minExperience: 3,
+        maxExperience: 8,
+        requiredSkills: ['Java', 'Spring Boot', 'React'],
+        description: 'Created from Xplore enterprise frontend.',
+        salaryRange: '18-28 LPA',
+        headcount: 2,
+        status: 'OPEN',
+        hiringManagerId: 1,
+        recruiterId: 10
+      })
+    });
+  }
+
+  async function createDemoSlot() {
+    await api(interviewerBase, '/api/slots', {
+      method: 'POST',
+      body: JSON.stringify({
+        interviewerId: 1,
+        interviewerName: 'Alice Johnson',
+        technicalSkills: ['Java', 'Spring Boot', 'React'],
+        minYearsExperience: 3,
+        startTime: '2026-06-05T10:00:00',
+        endTime: '2026-06-05T11:00:00',
+        round: 'L1',
+        meetingLink: 'https://meet.example.com/xplore',
+        status: 'AVAILABLE'
+      })
+    });
+  }
+
   return (
-    <div className="adminGrid">
-      {['Global Dashboard', 'User Management', 'Entitlement Management', 'Organization Management', 'Platform Configuration', 'Audit Logs'].map((item) => (
-        <article className="adminCard" key={item}>
-          <Building2 size={20} />
-          <h3>{item}</h3>
-          <p>Govern roles, policies, workflows, and operational controls.</p>
-        </article>
-      ))}
+    <div className="pageStack">
+      <div className="adminGrid">
+        {['Global Dashboard', 'User Management', 'Entitlement Management', 'Organization Management', 'Platform Configuration', 'Audit Logs'].map((item) => (
+          <article className="adminCard" key={item}>
+            <Building2 size={20} />
+            <h3>{item}</h3>
+            <p>Govern roles, policies, workflows, and operational controls.</p>
+          </article>
+        ))}
+      </div>
+      <Panel title="Backend Operations" icon={Sparkles}>
+        <div className="quickActions">
+          <button className="primaryButton" onClick={() => runBackendAction('Demo job created', createDemoJob)}>Create Live Job</button>
+          <button className="primaryButton" onClick={() => runBackendAction('Demo slot created', createDemoSlot)}>Create Live Slot</button>
+        </div>
+      </Panel>
+      <section className="dashboardGrid">
+        <DataTable title="Candidates" rows={data.candidates} columns={['id', 'name', 'email', 'source']} />
+        <DataTable title="Jobs" rows={data.jobs} columns={['id', 'title', 'status', 'headcount']} />
+        <DataTable title="Events" rows={data.events} columns={['id', 'eventType', 'aggregateId']} />
+      </section>
     </div>
   );
 }
 
-function AnalyticsPage() {
+function AnalyticsPage({ data }) {
+  const funnel = data.analytics?.funnelByStage || {};
+  const funnelLabels = Object.keys(funnel).length ? Object.keys(funnel) : ['Applied', 'Screened', 'Interview', 'Offer', 'Hired'];
+
   return (
     <div className="pageStack">
+      <section className="analyticsStrip">
+        <div>
+          <span>Offer Acceptance</span>
+          <strong>{Number(data.analytics?.offerAcceptanceRate || 0).toFixed(1)}%</strong>
+        </div>
+        <div>
+          <span>Avg Time To Hire</span>
+          <strong>{data.analytics?.averageTimeToHireDays ?? 'N/A'}</strong>
+        </div>
+        <div>
+          <span>Webhook Events</span>
+          <strong>{data.events.length}</strong>
+        </div>
+      </section>
       <section className="dashboardGrid">
         <Panel title="Bar Chart" icon={BarChart3}><BarChart /></Panel>
         <Panel title="Line Chart" icon={Activity}><LineChart /></Panel>
-        <Panel title="Funnel" icon={Gauge}><Funnel /></Panel>
+        <Panel title="Funnel" icon={Gauge}><Funnel labels={funnelLabels} values={funnel} /></Panel>
       </section>
       <Panel title="Activity Heatmap" icon={Grid3X3}><Heatmap /></Panel>
     </div>
@@ -743,8 +959,16 @@ function LineChart() {
   return <div className="lineChart"><span /><span /><span /><span /></div>;
 }
 
-function Funnel() {
-  return <div className="funnel">{['Applied', 'Screened', 'Interview', 'Offer', 'Hired'].map((item, index) => <span style={{ width: `${100 - index * 13}%` }} key={item}>{item}</span>)}</div>;
+function Funnel({ labels = ['Applied', 'Screened', 'Interview', 'Offer', 'Hired'], values = {} }) {
+  return (
+    <div className="funnel">
+      {labels.map((item, index) => (
+        <span style={{ width: `${Math.max(42, 100 - index * 13)}%` }} key={item}>
+          {item} {values[item] != null ? `· ${values[item]}` : ''}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function Heatmap() {
@@ -778,6 +1002,30 @@ function AccessDenied({ entitlement }) {
       <h2>Access denied</h2>
       <p>This page requires the entitlement <strong>{entitlement}</strong>. Switch roles or request access from an administrator.</p>
     </section>
+  );
+}
+
+function DataTable({ title, rows, columns }) {
+  return (
+    <Panel title={title} icon={FileText}>
+      <div className="tableWrap">
+        <table>
+          <thead>
+            <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 7).map((row) => (
+              <tr key={row.id}>
+                {columns.map((column) => <td key={column}>{String(row[column] ?? '')}</td>)}
+              </tr>
+            ))}
+            {!rows.length && (
+              <tr><td colSpan={columns.length}>No live records yet</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
   );
 }
 
