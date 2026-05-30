@@ -1,32 +1,32 @@
-# Xplore Hiring Frontend
+# Xplore Frontend
 
-Recruiter-facing web console for the Xplore hiring platform.
+Enterprise-grade frontend application for role-based career discovery, opportunity exploration, learning, resume building, profile management, administration, analytics, and entitlement-driven experiences.
 
 ## Tech Stack
 
 - React 19
 - Vite 7
 - Lucide React
-- Plain CSS
+- Plain CSS design system
 
-## Backend Services
+## Experience
 
-Run these services before using the frontend:
+- Premium responsive UI with dark and light themes.
+- Authentication screens for splash, welcome, login, sign up, OTP, forgot password, reset password, and account recovery.
+- Role previews for Super Admin, Admin, Recruiter, Hiring Manager, and Employee/User.
+- Entitlement-driven navigation and access denied states.
+- Dashboard, Opportunity Explorer, Learning Hub, Resume Builder, Profile, Notifications, Admin, Analytics, Security, Component Library, Blueprint, and Settings screens.
+- Built-in product blueprint covering information architecture, user journeys, navigation, folder structure, component hierarchy, responsive screens, design system, role navigation, entitlements, wireframes, and high-fidelity mockups.
+
+## Optional Backend Services
+
+The current enterprise UI uses production-quality mock data and does not require backend services to render. Earlier hiring workflow APIs can still run locally:
 
 ```text
 Interviewer Service:  http://localhost:8081
 Recruitment Service:  http://localhost:8082
 Frontend:             http://localhost:5173
 ```
-
-## Features
-
-- Dashboard cards for candidates, jobs, applications, interviews, and offers.
-- Candidate, job, interviewer, and interview-slot creation forms.
-- Application creation and interview scheduling workflow.
-- Feedback submission, no-show marking, and offer create/send/accept flow.
-- Tables for applications, interview slots, offers, and webhook events.
-- Analytics strip for offer acceptance, time-to-hire, and funnel count.
 
 ## Run Locally
 

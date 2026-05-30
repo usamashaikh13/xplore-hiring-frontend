@@ -1,601 +1,804 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
+  Activity,
   BarChart3,
+  Bell,
+  BookOpen,
   BriefcaseBusiness,
-  CalendarClock,
-  CheckCircle2,
-  CircleAlert,
+  Building2,
+  CalendarCheck,
+  Check,
+  ChevronRight,
+  FileCheck2,
   FileText,
-  GitBranch,
-  LayoutDashboard,
-  Loader2,
-  MailCheck,
-  RefreshCcw,
-  Send,
-  Settings2,
+  Fingerprint,
+  Gauge,
+  Globe2,
+  GraduationCap,
+  Grid3X3,
+  Layers3,
+  Lock,
+  LogOut,
+  Menu,
+  Moon,
+  Search,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  UserCog,
   UserRound,
-  UsersRound
+  UsersRound,
+  X
 } from 'lucide-react';
 import './styles.css';
 
-const recruitmentBase = 'http://localhost:8082';
-const interviewerBase = 'http://localhost:8081';
-
-const emptyCandidate = {
-  name: 'Rahul Sharma',
-  email: 'rahul@example.com',
-  phone: '8888888888',
-  currentCompany: 'Acme',
-  currentDesignation: 'Software Engineer',
-  yearsExperience: 4.5,
-  skills: 'Java, Spring Boot, SQL',
-  tags: 'referral, priority',
-  resumeUrl: 'https://example.com/resume.pdf',
-  source: 'LinkedIn'
+const ENTITLEMENTS = {
+  VIEW_JOBS: 'VIEW_JOBS',
+  APPLY_JOBS: 'APPLY_JOBS',
+  VIEW_LEARNING: 'VIEW_LEARNING',
+  CREATE_JOB: 'CREATE_JOB',
+  MANAGE_USERS: 'MANAGE_USERS',
+  VIEW_ANALYTICS: 'VIEW_ANALYTICS',
+  ADMIN_ACCESS: 'ADMIN_ACCESS',
+  SUPER_ADMIN_ACCESS: 'SUPER_ADMIN_ACCESS',
+  MANAGE_SECURITY: 'MANAGE_SECURITY',
+  MANAGE_ORG: 'MANAGE_ORG',
+  REVIEW_CANDIDATES: 'REVIEW_CANDIDATES',
+  SCHEDULE_INTERVIEWS: 'SCHEDULE_INTERVIEWS',
+  MANAGE_OFFERS: 'MANAGE_OFFERS',
+  BUILD_RESUME: 'BUILD_RESUME',
+  VIEW_PROFILE: 'VIEW_PROFILE',
+  VIEW_NOTIFICATIONS: 'VIEW_NOTIFICATIONS',
+  VIEW_BLUEPRINT: 'VIEW_BLUEPRINT'
 };
 
-const emptyJob = {
-  title: 'Backend Engineer',
-  department: 'Engineering',
-  location: 'Mumbai',
-  employmentType: 'Full-time',
-  minExperience: 3,
-  maxExperience: 6,
-  requiredSkills: 'Java, Spring Boot, SQL',
-  description: 'Build backend services for the hiring platform.',
-  salaryRange: '12-18 LPA',
-  headcount: 1,
-  status: 'OPEN',
-  hiringManagerId: 1,
-  recruiterId: 10
-};
-
-const emptyInterviewer = {
-  name: 'Alice Johnson',
-  email: 'alice@example.com',
-  phone: '9999999999',
-  technicalSkills: 'Java, Spring Boot',
-  yearsExperience: 6,
-  designation: 'Senior Engineer',
-  department: 'Engineering',
-  bio: 'Backend interviewer'
-};
-
-const emptySlot = {
-  interviewerId: 1,
-  interviewerName: 'Alice Johnson',
-  technicalSkills: 'Java, Spring Boot',
-  minYearsExperience: 3,
-  startTime: '2026-05-20T10:00:00',
-  endTime: '2026-05-20T11:00:00',
-  round: 'L1',
-  meetingLink: 'https://meet.example.com/interview-1',
-  status: 'AVAILABLE'
-};
-
-const emptyOffer = {
-  title: 'Backend Engineer',
-  salary: 1500000,
-  currency: 'INR',
-  joiningDate: '2026-06-15',
-  expiresAt: '2026-06-01T18:00:00',
-  status: 'DRAFT',
-  notes: 'Standard offer'
-};
-
-function csv(value) {
-  return String(value || '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-async function request(base, path, options = {}) {
-  const response = await fetch(`${base}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options
-  });
-  const text = await response.text();
-  const data = text ? safeJson(text) : null;
-  if (!response.ok) {
-    throw new Error(typeof data === 'string' ? data : data?.message || text || `HTTP ${response.status}`);
+const roleProfiles = {
+  superAdmin: {
+    label: 'Super Admin',
+    title: 'Global platform owner',
+    entitlements: Object.values(ENTITLEMENTS)
+  },
+  admin: {
+    label: 'Admin',
+    title: 'Organization administrator',
+    entitlements: [
+      ENTITLEMENTS.MANAGE_USERS,
+      ENTITLEMENTS.ADMIN_ACCESS,
+      ENTITLEMENTS.VIEW_ANALYTICS,
+      ENTITLEMENTS.MANAGE_SECURITY,
+      ENTITLEMENTS.MANAGE_ORG,
+      ENTITLEMENTS.VIEW_NOTIFICATIONS,
+      ENTITLEMENTS.VIEW_BLUEPRINT
+    ]
+  },
+  recruiter: {
+    label: 'Recruiter',
+    title: 'Hiring operations lead',
+    entitlements: [
+      ENTITLEMENTS.VIEW_JOBS,
+      ENTITLEMENTS.CREATE_JOB,
+      ENTITLEMENTS.REVIEW_CANDIDATES,
+      ENTITLEMENTS.SCHEDULE_INTERVIEWS,
+      ENTITLEMENTS.MANAGE_OFFERS,
+      ENTITLEMENTS.VIEW_ANALYTICS,
+      ENTITLEMENTS.VIEW_NOTIFICATIONS
+    ]
+  },
+  hiringManager: {
+    label: 'Hiring Manager',
+    title: 'Candidate decision owner',
+    entitlements: [
+      ENTITLEMENTS.VIEW_JOBS,
+      ENTITLEMENTS.REVIEW_CANDIDATES,
+      ENTITLEMENTS.SCHEDULE_INTERVIEWS,
+      ENTITLEMENTS.VIEW_ANALYTICS,
+      ENTITLEMENTS.VIEW_NOTIFICATIONS
+    ]
+  },
+  employee: {
+    label: 'Employee/User',
+    title: 'Career growth explorer',
+    entitlements: [
+      ENTITLEMENTS.VIEW_JOBS,
+      ENTITLEMENTS.APPLY_JOBS,
+      ENTITLEMENTS.VIEW_LEARNING,
+      ENTITLEMENTS.BUILD_RESUME,
+      ENTITLEMENTS.VIEW_PROFILE,
+      ENTITLEMENTS.VIEW_NOTIFICATIONS
+    ]
   }
-  return data;
-}
+};
 
-function safeJson(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
+const navItems = [
+  { id: 'dashboard', label: 'Dashboard', icon: Gauge },
+  { id: 'opportunities', label: 'Opportunities', icon: BriefcaseBusiness, entitlement: ENTITLEMENTS.VIEW_JOBS },
+  { id: 'learning', label: 'Learning Hub', icon: GraduationCap, entitlement: ENTITLEMENTS.VIEW_LEARNING },
+  { id: 'resume', label: 'Resume Builder', icon: FileText, entitlement: ENTITLEMENTS.BUILD_RESUME },
+  { id: 'profile', label: 'Profile', icon: UserRound, entitlement: ENTITLEMENTS.VIEW_PROFILE },
+  { id: 'notifications', label: 'Notifications', icon: Bell, entitlement: ENTITLEMENTS.VIEW_NOTIFICATIONS },
+  { id: 'admin', label: 'Administration', icon: UserCog, entitlement: ENTITLEMENTS.ADMIN_ACCESS },
+  { id: 'analytics', label: 'Analytics', icon: BarChart3, entitlement: ENTITLEMENTS.VIEW_ANALYTICS },
+  { id: 'security', label: 'Security Center', icon: ShieldCheck, entitlement: ENTITLEMENTS.MANAGE_SECURITY },
+  { id: 'components', label: 'Components', icon: Grid3X3, entitlement: ENTITLEMENTS.VIEW_BLUEPRINT },
+  { id: 'blueprint', label: 'Blueprint', icon: Layers3, entitlement: ENTITLEMENTS.VIEW_BLUEPRINT },
+  { id: 'settings', label: 'Settings', icon: Settings }
+];
+
+const opportunities = [
+  {
+    company: 'Microsoft',
+    logo: 'M',
+    title: 'Principal Product Engineer',
+    salary: '$160k - $220k',
+    location: 'Redmond / Remote',
+    type: 'Hybrid',
+    skills: ['React', 'Azure', 'Design Systems'],
+    match: 94
+  },
+  {
+    company: 'Stripe',
+    logo: 'S',
+    title: 'Platform Experience Lead',
+    salary: '$170k - $245k',
+    location: 'San Francisco',
+    type: 'Onsite',
+    skills: ['Payments', 'Node', 'Analytics'],
+    match: 89
+  },
+  {
+    company: 'Airbnb',
+    logo: 'A',
+    title: 'Career Marketplace Architect',
+    salary: '$150k - $210k',
+    location: 'Remote',
+    type: 'Remote',
+    skills: ['GraphQL', 'UX', 'Search'],
+    match: 86
   }
-}
+];
+
+const courses = [
+  { title: 'Enterprise AI Product Strategy', level: 'Advanced', progress: 72, badge: 'AI Builder' },
+  { title: 'Cloud Architecture Path', level: 'Intermediate', progress: 48, badge: 'Cloud Ready' },
+  { title: 'Leadership for Hiring Managers', level: 'Foundational', progress: 91, badge: 'People Lead' }
+];
+
+const notifications = [
+  { type: 'Interview Invitation', text: 'L2 architecture panel scheduled for tomorrow.', tone: 'info' },
+  { type: 'Learning Recommendation', text: 'New certification path unlocked: Enterprise AI.', tone: 'success' },
+  { type: 'System Announcement', text: 'Security policy review pending for administrators.', tone: 'warning' }
+];
+
+const componentInventory = [
+  'Buttons', 'Inputs', 'Dropdowns', 'Date Pickers', 'Modals', 'Sidebars', 'Navigation Menus',
+  'Tables', 'Cards', 'Charts', 'Accordions', 'Tabs', 'Breadcrumbs', 'Empty States',
+  'Loading Skeletons', 'Error Components'
+];
 
 function App() {
+  const [theme, setTheme] = useState('dark');
+  const [authScreen, setAuthScreen] = useState('splash');
+  const [authenticated, setAuthenticated] = useState(false);
+  const [roleKey, setRoleKey] = useState('employee');
   const [activePage, setActivePage] = useState('dashboard');
-  const [loading, setLoading] = useState(false);
-  const [log, setLog] = useState([]);
-  const [dashboard, setDashboard] = useState(null);
-  const [analytics, setAnalytics] = useState(null);
-  const [candidates, setCandidates] = useState([]);
-  const [jobs, setJobs] = useState([]);
-  const [applications, setApplications] = useState([]);
-  const [slots, setSlots] = useState([]);
-  const [recruitments, setRecruitments] = useState([]);
-  const [offers, setOffers] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [candidateForm, setCandidateForm] = useState(emptyCandidate);
-  const [jobForm, setJobForm] = useState(emptyJob);
-  const [interviewerForm, setInterviewerForm] = useState(emptyInterviewer);
-  const [slotForm, setSlotForm] = useState(emptySlot);
-  const [offerForm, setOfferForm] = useState(emptyOffer);
-  const [selected, setSelected] = useState({ candidateId: '', jobId: '', applicationId: '', recruitmentId: '', offerId: '' });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const profile = roleProfiles[roleKey];
 
-  const stats = useMemo(() => [
-    { label: 'Candidates', value: dashboard?.totalCandidates ?? candidates.length, icon: UsersRound },
-    { label: 'Open Jobs', value: dashboard?.openJobs ?? jobs.filter((job) => job.status === 'OPEN').length, icon: BriefcaseBusiness },
-    { label: 'Applications', value: dashboard?.totalApplications ?? applications.length, icon: FileText },
-    { label: 'Interviews', value: dashboard?.scheduledInterviews ?? recruitments.length, icon: CalendarClock },
-    { label: 'Pending Offers', value: dashboard?.pendingOffers ?? offers.length, icon: MailCheck }
-  ], [applications.length, candidates.length, dashboard, jobs, offers.length, recruitments.length]);
+  const can = (entitlement) => !entitlement || profile.entitlements.includes(entitlement);
+  const visibleNav = navItems.filter((item) => can(item.entitlement));
 
-  useEffect(() => {
-    refreshAll();
-  }, []);
-
-  function pushLog(type, message) {
-    setLog((items) => [{ type, message, time: new Date().toLocaleTimeString() }, ...items].slice(0, 8));
+  function enterApp(nextRole = roleKey) {
+    setRoleKey(nextRole);
+    setAuthenticated(true);
+    setAuthScreen('app');
+    setActivePage('dashboard');
   }
 
-  async function run(label, fn) {
-    setLoading(true);
-    try {
-      const result = await fn();
-      pushLog('success', label);
-      return result;
-    } catch (error) {
-      pushLog('error', `${label}: ${error.message}`);
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }
+  return (
+    <div className={`app ${theme}`}>
+      {!authenticated ? (
+        <AuthExperience
+          authScreen={authScreen}
+          setAuthScreen={setAuthScreen}
+          roleKey={roleKey}
+          setRoleKey={setRoleKey}
+          enterApp={enterApp}
+          theme={theme}
+          setTheme={setTheme}
+        />
+      ) : (
+        <AppShell
+          profile={profile}
+          roleKey={roleKey}
+          setRoleKey={setRoleKey}
+          activePage={activePage}
+          setActivePage={setActivePage}
+          visibleNav={visibleNav}
+          can={can}
+          theme={theme}
+          setTheme={setTheme}
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          logout={() => {
+            setAuthenticated(false);
+            setAuthScreen('welcome');
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
-  async function refreshAll() {
-    await run('Refreshed workspace data', async () => {
-      const [dash, ana, cand, job, app, slot, rec, off, event] = await Promise.all([
-        request(recruitmentBase, '/api/dashboard/summary').catch(() => null),
-        request(recruitmentBase, '/api/analytics/summary').catch(() => null),
-        request(recruitmentBase, '/api/candidates').catch(() => []),
-        request(recruitmentBase, '/api/jobs').catch(() => []),
-        request(recruitmentBase, '/api/applications').catch(() => []),
-        request(interviewerBase, '/api/slots').catch(() => []),
-        request(recruitmentBase, '/api/recruitments').catch(() => []),
-        request(recruitmentBase, '/api/offers').catch(() => []),
-        request(recruitmentBase, '/api/webhook-events').catch(() => [])
-      ]);
-      setDashboard(dash);
-      setAnalytics(ana);
-      setCandidates(cand);
-      setJobs(job);
-      setApplications(app);
-      setSlots(slot);
-      setRecruitments(rec);
-      setOffers(off);
-      setEvents(event);
-      hydrateSelections(cand, job, app, rec, off);
-    });
-  }
-
-  function hydrateSelections(cand, job, app, rec, off) {
-    setSelected((current) => ({
-      candidateId: current.candidateId || cand?.[0]?.id || '',
-      jobId: current.jobId || job?.[0]?.id || '',
-      applicationId: current.applicationId || app?.[0]?.id || '',
-      recruitmentId: current.recruitmentId || rec?.[0]?.id || '',
-      offerId: current.offerId || off?.[0]?.id || ''
-    }));
-  }
-
-  async function createInterviewer() {
-    await run('Created interviewer', async () => {
-      const payload = { ...interviewerForm, technicalSkills: csv(interviewerForm.technicalSkills) };
-      await request(interviewerBase, '/api/interviewers', { method: 'POST', body: JSON.stringify(payload) });
-    });
-  }
-
-  async function createSlot() {
-    await run('Created interview slot', async () => {
-      const payload = { ...slotForm, technicalSkills: csv(slotForm.technicalSkills), interviewerId: Number(slotForm.interviewerId), minYearsExperience: Number(slotForm.minYearsExperience) };
-      await request(interviewerBase, '/api/slots', { method: 'POST', body: JSON.stringify(payload) });
-      await refreshAll();
-    });
-  }
-
-  async function createCandidate() {
-    await run('Created candidate', async () => {
-      const payload = { ...candidateForm, skills: csv(candidateForm.skills), tags: csv(candidateForm.tags), yearsExperience: Number(candidateForm.yearsExperience) };
-      const candidate = await request(recruitmentBase, '/api/candidates', { method: 'POST', body: JSON.stringify(payload) });
-      setSelected((state) => ({ ...state, candidateId: candidate.id }));
-      await refreshAll();
-    });
-  }
-
-  async function createJob() {
-    await run('Created job', async () => {
-      const payload = {
-        ...jobForm,
-        requiredSkills: csv(jobForm.requiredSkills),
-        minExperience: Number(jobForm.minExperience),
-        maxExperience: Number(jobForm.maxExperience),
-        headcount: Number(jobForm.headcount),
-        hiringManagerId: Number(jobForm.hiringManagerId),
-        recruiterId: Number(jobForm.recruiterId)
-      };
-      const job = await request(recruitmentBase, '/api/jobs', { method: 'POST', body: JSON.stringify(payload) });
-      setSelected((state) => ({ ...state, jobId: job.id }));
-      await refreshAll();
-    });
-  }
-
-  async function createApplication() {
-    await run('Created application', async () => {
-      const payload = {
-        jobId: Number(selected.jobId),
-        candidateId: Number(selected.candidateId),
-        source: 'Frontend',
-        ownerRecruiterId: 10,
-        screeningNotes: 'Created from hiring console'
-      };
-      const application = await request(recruitmentBase, '/api/applications', { method: 'POST', body: JSON.stringify(payload) });
-      setSelected((state) => ({ ...state, applicationId: application.id }));
-      await refreshAll();
-    });
-  }
-
-  async function scheduleInterview() {
-    await run('Scheduled interview', async () => {
-      const job = jobs.find((item) => item.id === Number(selected.jobId));
-      const payload = {
-        candidateId: Number(selected.candidateId),
-        applicationId: Number(selected.applicationId),
-        requiredSkills: job?.requiredSkills?.length ? job.requiredSkills.slice(0, 2) : ['Java', 'Spring Boot'],
-        minYearsExperience: job?.minExperience || 3,
-        round: 'L1'
-      };
-      const recruitment = await request(recruitmentBase, '/api/recruitments/schedule', { method: 'POST', body: JSON.stringify(payload) });
-      setSelected((state) => ({ ...state, recruitmentId: recruitment.id }));
-      await refreshAll();
-    });
-  }
-
-  async function submitFeedback() {
-    await run('Submitted feedback', async () => {
-      const recruitment = recruitments.find((item) => item.id === Number(selected.recruitmentId)) || recruitments[0];
-      const payload = {
-        interviewSlotId: recruitment?.interviewSlotId,
-        interviewerId: recruitment?.interviewerId,
-        candidateId: recruitment?.candidateId,
-        recruitmentId: recruitment?.id,
-        technicalRating: 4,
-        communicationRating: 4,
-        problemSolvingRating: 5,
-        overallRating: 4,
-        recommendation: 'HIRE',
-        strengths: 'Strong backend fundamentals',
-        weaknesses: 'Needs deeper architecture examples',
-        detailedComments: 'Good fit for backend role.'
-      };
-      await request(interviewerBase, '/api/feedback', { method: 'POST', body: JSON.stringify(payload) });
-      await refreshAll();
-    });
-  }
-
-  async function createOffer() {
-    await run('Created offer', async () => {
-      const app = applications.find((item) => item.id === Number(selected.applicationId)) || applications[0];
-      const payload = {
-        ...offerForm,
-        applicationId: Number(selected.applicationId),
-        candidateId: app?.candidateId || Number(selected.candidateId),
-        jobId: app?.jobId || Number(selected.jobId),
-        salary: Number(offerForm.salary)
-      };
-      const offer = await request(recruitmentBase, '/api/offers', { method: 'POST', body: JSON.stringify(payload) });
-      setSelected((state) => ({ ...state, offerId: offer.id }));
-      await refreshAll();
-    });
-  }
-
-  async function updateOffer(status) {
-    await run(`Offer ${status.toLowerCase()}`, async () => {
-      await request(recruitmentBase, `/api/offers/${selected.offerId}/status?status=${status}`, { method: 'PATCH' });
-      await refreshAll();
-    });
-  }
-
-  async function markNoShow() {
-    await run('Marked slot no-show', async () => {
-      const recruitment = recruitments.find((item) => item.id === Number(selected.recruitmentId)) || recruitments[0];
-      await request(interviewerBase, `/api/slots/${recruitment.interviewSlotId}/no-show`, { method: 'PATCH' });
-      await refreshAll();
-    });
-  }
-
-  const pages = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'setup', label: 'Setup', icon: Settings2 },
-    { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
-    { id: 'interviews', label: 'Interviews', icon: CalendarClock },
-    { id: 'offers', label: 'Offers', icon: MailCheck },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'activity', label: 'Activity', icon: FileText }
-  ];
-
-  const pageCopy = {
-    dashboard: ['Dashboard', 'Current hiring health across both services.'],
-    setup: ['Setup', 'Create the core records needed before running a hiring flow.'],
-    pipeline: ['Pipeline', 'Move a candidate from application to scheduled interview and feedback.'],
-    interviews: ['Interviews', 'Review interview slots and recruitment records.'],
-    offers: ['Offers', 'Create, send, and accept offers tied to applications.'],
-    analytics: ['Analytics', 'Inspect funnel, offer acceptance, and platform events.'],
-    activity: ['Activity', 'Recent frontend operations and API outcomes.']
-  };
-
-  function renderPage() {
-    if (activePage === 'dashboard') {
-      return (
-        <>
-          <section className="stats">
-            {stats.map(({ label, value, icon: Icon }) => (
-              <div className="metric" key={label}>
-                <Icon size={18} />
-                <span>{label}</span>
-                <strong>{value}</strong>
-              </div>
-            ))}
-          </section>
-          <section className="grid two">
-            <DataTable title="Applications" rows={applications} columns={['id', 'candidateId', 'jobId', 'stage']} />
-            <DataTable title="Offers" rows={offers} columns={['id', 'candidateId', 'status', 'salary']} />
-          </section>
-        </>
-      );
-    }
-
-    if (activePage === 'setup') {
-      return (
-        <section className="grid two">
-          <Panel title="Candidate" icon={UserRound} action="Create" onAction={createCandidate}>
-            <Form data={candidateForm} setData={setCandidateForm} fields={[
-              ['name', 'Name'], ['email', 'Email'], ['phone', 'Phone'], ['currentCompany', 'Company'],
-              ['currentDesignation', 'Designation'], ['yearsExperience', 'Experience'], ['skills', 'Skills'],
-              ['tags', 'Tags'], ['resumeUrl', 'Resume URL'], ['source', 'Source']
-            ]} />
-          </Panel>
-          <Panel title="Job Opening" icon={BriefcaseBusiness} action="Create" onAction={createJob}>
-            <Form data={jobForm} setData={setJobForm} fields={[
-              ['title', 'Title'], ['department', 'Department'], ['location', 'Location'], ['employmentType', 'Type'],
-              ['minExperience', 'Min Exp'], ['maxExperience', 'Max Exp'], ['requiredSkills', 'Skills'],
-              ['salaryRange', 'Salary'], ['headcount', 'Headcount'], ['status', 'Status']
-            ]} />
-          </Panel>
-          <Panel title="Interviewer" icon={UsersRound} action="Create" onAction={createInterviewer}>
-            <Form data={interviewerForm} setData={setInterviewerForm} fields={[
-              ['name', 'Name'], ['email', 'Email'], ['phone', 'Phone'], ['technicalSkills', 'Skills'],
-              ['yearsExperience', 'Experience'], ['designation', 'Designation'], ['department', 'Department']
-            ]} />
-          </Panel>
-          <Panel title="Interview Slot" icon={CalendarClock} action="Create" onAction={createSlot}>
-            <Form data={slotForm} setData={setSlotForm} fields={[
-              ['interviewerId', 'Interviewer ID'], ['interviewerName', 'Interviewer'], ['technicalSkills', 'Skills'],
-              ['minYearsExperience', 'Min Exp'], ['startTime', 'Start'], ['endTime', 'End'], ['round', 'Round'], ['meetingLink', 'Meeting Link']
-            ]} />
-          </Panel>
-        </section>
-      );
-    }
-
-    if (activePage === 'pipeline') {
-      return (
-        <section className="pageStack">
-          <Panel title="Pipeline Actions" icon={GitBranch}>
-            <div className="selectorRow">
-              <Select label="Candidate" value={selected.candidateId} onChange={(candidateId) => setSelected({ ...selected, candidateId })} items={candidates} />
-              <Select label="Job" value={selected.jobId} onChange={(jobId) => setSelected({ ...selected, jobId })} items={jobs} labelKey="title" />
-              <Select label="Application" value={selected.applicationId} onChange={(applicationId) => setSelected({ ...selected, applicationId })} items={applications} labelKey="stage" />
-              <Select label="Recruitment" value={selected.recruitmentId} onChange={(recruitmentId) => setSelected({ ...selected, recruitmentId })} items={recruitments} labelKey="status" />
-              <Select label="Offer" value={selected.offerId} onChange={(offerId) => setSelected({ ...selected, offerId })} items={offers} labelKey="status" />
-            </div>
-            <div className="actions">
-              <button onClick={createApplication}><FileText size={16} /> Apply</button>
-              <button onClick={scheduleInterview}><CalendarClock size={16} /> Schedule</button>
-              <button onClick={submitFeedback}><CheckCircle2 size={16} /> Feedback</button>
-              <button onClick={markNoShow}><CircleAlert size={16} /> No-show</button>
-            </div>
-          </Panel>
-          <div className="grid two">
-            <DataTable title="Applications" rows={applications} columns={['id', 'candidateId', 'jobId', 'stage']} />
-            <DataTable title="Recruitments" rows={recruitments} columns={['id', 'candidateId', 'interviewerId', 'interviewSlotId', 'status']} />
-          </div>
-        </section>
-      );
-    }
-
-    if (activePage === 'interviews') {
-      return (
-        <section className="grid two">
-          <DataTable title="Slots" rows={slots} columns={['id', 'interviewerName', 'round', 'status', 'bookedCandidateId']} />
-          <DataTable title="Recruitments" rows={recruitments} columns={['id', 'candidateId', 'interviewerId', 'interviewSlotId', 'status']} />
-        </section>
-      );
-    }
-
-    if (activePage === 'offers') {
-      return (
-        <section className="grid two">
-          <Panel title="Offer" icon={MailCheck} action="Create" onAction={createOffer}>
-            <Form data={offerForm} setData={setOfferForm} fields={[
-              ['title', 'Title'], ['salary', 'Salary'], ['currency', 'Currency'], ['joiningDate', 'Joining Date'],
-              ['expiresAt', 'Expires At'], ['status', 'Status'], ['notes', 'Notes']
-            ]} />
-            <div className="actions tight">
-              <button onClick={() => updateOffer('SENT')}><Send size={16} /> Send</button>
-              <button onClick={() => updateOffer('ACCEPTED')}><CheckCircle2 size={16} /> Accept</button>
-            </div>
-          </Panel>
-          <DataTable title="Offers" rows={offers} columns={['id', 'applicationId', 'candidateId', 'status', 'salary']} />
-        </section>
-      );
-    }
-
-    if (activePage === 'analytics') {
-      return (
-        <section className="pageStack">
-          <section className="analyticsStrip">
-            <div>
-              <span>Offer Acceptance</span>
-              <strong>{Number(analytics?.offerAcceptanceRate || 0).toFixed(1)}%</strong>
-            </div>
-            <div>
-              <span>Avg Time To Hire</span>
-              <strong>{analytics?.averageTimeToHireDays ?? 'N/A'}</strong>
-            </div>
-            <div>
-              <span>Funnel</span>
-              <strong>{Object.values(analytics?.funnelByStage || {}).reduce((sum, value) => sum + value, 0)}</strong>
-            </div>
-          </section>
-          <DataTable title="Webhook Events" rows={events} columns={['id', 'eventType', 'aggregateType', 'aggregateId']} />
-        </section>
-      );
-    }
-
+function AuthExperience({ authScreen, setAuthScreen, roleKey, setRoleKey, enterApp, theme, setTheme }) {
+  if (authScreen === 'splash') {
     return (
-      <Panel title="Activity" icon={BarChart3}>
-        <div className="log">
-          {log.map((item, index) => (
-            <div className={`logItem ${item.type}`} key={`${item.time}-${index}`}>
-              <span>{item.time}</span>
-              <p>{item.message}</p>
-            </div>
-          ))}
-          {!log.length && <p className="muted">No activity yet.</p>}
-        </div>
-      </Panel>
+      <main className="authSurface splash">
+        <ThemeButton theme={theme} setTheme={setTheme} />
+        <div className="logoOrb" aria-label="Xplore logo">X</div>
+        <div className="loadingRail"><span /></div>
+        <h1>Xplore</h1>
+        <p>Explore opportunities, learning paths, services, and career growth through one secure enterprise platform.</p>
+        <button className="primaryButton" onClick={() => setAuthScreen('welcome')}>Continue</button>
+      </main>
     );
   }
 
-  return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brandMark">X</div>
-          <div>
-            <strong>Xplore</strong>
-            <span>Hiring Console</span>
+  if (authScreen === 'welcome') {
+    return (
+      <main className="authSurface welcome">
+        <ThemeButton theme={theme} setTheme={setTheme} />
+        <section className="welcomeCopy">
+          <p className="eyebrow">Fortune 500 ready digital workspace</p>
+          <h1>Discover roles, build skills, and grow inside Xplore.</h1>
+          <p>Premium career mobility, learning, resume intelligence, hiring workflows, and entitlement-driven access in one adaptive experience.</p>
+          <div className="authActions">
+            <button className="primaryButton" onClick={() => setAuthScreen('login')}>Login</button>
+            <button className="secondaryButton" onClick={() => setAuthScreen('signup')}>Sign Up</button>
           </div>
-        </div>
-        <nav>
-          {pages.map(({ id, label, icon: Icon }) => (
-            <button
-              className={activePage === id ? 'navItem active' : 'navItem'}
-              key={id}
-              onClick={() => setActivePage(id)}
-            >
-              <Icon size={16} />
-              {label}
-            </button>
-          ))}
-        </nav>
-        <button className="primary full" onClick={refreshAll} disabled={loading}>
-          {loading ? <Loader2 className="spin" size={16} /> : <RefreshCcw size={16} />}
-          Refresh
-        </button>
-      </aside>
-
-      <main className="main">
-        <header className="topbar">
-          <div>
-            <h1>{pageCopy[activePage][0]}</h1>
-            <p>{pageCopy[activePage][1]}</p>
+          <div className="socialRow" aria-label="Social login options">
+            <button>Google</button>
+            <button>Microsoft</button>
+            <button>LinkedIn</button>
           </div>
-          <div className="serviceState">
-            <span><CheckCircle2 size={16} /> Interviewer 8081</span>
-            <span><CheckCircle2 size={16} /> Recruitment 8082</span>
-          </div>
-        </header>
-
-        {renderPage()}
+        </section>
+        <HeroIllustration />
       </main>
-    </div>
+    );
+  }
+
+  const titles = {
+    login: 'Welcome back',
+    signup: 'Create your Xplore account',
+    otp: 'Verify your identity',
+    forgot: 'Recover your account',
+    reset: 'Create a new password',
+    recovery: 'Account recovery'
+  };
+
+  return (
+    <main className="authSurface formSurface">
+      <ThemeButton theme={theme} setTheme={setTheme} />
+      <section className="authCard">
+        <button className="textButton" onClick={() => setAuthScreen('welcome')}>Back</button>
+        <h1>{titles[authScreen]}</h1>
+        <p>Validation, loading, error, and success states are represented for production handoff.</p>
+        {authScreen === 'login' && (
+          <AuthForm
+            fields={['Email or username', 'Password']}
+            footer={
+              <>
+                <label className="checkLine"><input type="checkbox" /> Remember me</label>
+                <button className="textButton" onClick={() => setAuthScreen('forgot')}>Forgot password?</button>
+              </>
+            }
+            actionLabel="Login securely"
+            onAction={() => setAuthScreen('otp')}
+          />
+        )}
+        {authScreen === 'signup' && (
+          <AuthForm
+            fields={['Full name', 'Work email', 'Mobile number', 'Create password']}
+            footer={<label className="checkLine"><input type="checkbox" /> I accept the Terms and Conditions</label>}
+            actionLabel="Create account"
+            onAction={() => setAuthScreen('otp')}
+          />
+        )}
+        {authScreen === 'otp' && (
+          <AuthForm
+            fields={['One-time password']}
+            actionLabel="Verify and continue"
+            onAction={() => enterApp(roleKey)}
+          />
+        )}
+        {authScreen === 'forgot' && (
+          <AuthForm fields={['Registered email']} actionLabel="Send recovery code" onAction={() => setAuthScreen('recovery')} />
+        )}
+        {authScreen === 'reset' && (
+          <AuthForm fields={['New password', 'Confirm password']} actionLabel="Reset password" onAction={() => setAuthScreen('login')} />
+        )}
+        {authScreen === 'recovery' && (
+          <AuthForm fields={['Recovery code', 'Verified email']} actionLabel="Continue recovery" onAction={() => setAuthScreen('reset')} />
+        )}
+        <RolePicker roleKey={roleKey} setRoleKey={setRoleKey} />
+      </section>
+    </main>
   );
 }
 
-function Panel({ title, icon: Icon, children, action, onAction }) {
+function AuthForm({ fields, footer, actionLabel, onAction }) {
   return (
-    <section className="panel">
-      <div className="panelHeader">
-        <h2><Icon size={18} /> {title}</h2>
-        {action && <button className="primary" onClick={onAction}>{action}</button>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Form({ data, setData, fields }) {
-  return (
-    <div className="formGrid">
-      {fields.map(([key, label]) => (
-        <label key={key}>
-          <span>{label}</span>
-          <input value={data[key] ?? ''} onChange={(event) => setData({ ...data, [key]: event.target.value })} />
+    <div className="authForm">
+      {fields.map((field) => (
+        <label key={field}>
+          <span>{field}</span>
+          <input type={field.toLowerCase().includes('password') ? 'password' : 'text'} placeholder={`Enter ${field.toLowerCase()}`} />
         </label>
       ))}
+      <div className="stateGrid">
+        <span className="state success">Valid</span>
+        <span className="state loading">Loading</span>
+        <span className="state error">Error</span>
+      </div>
+      <div className="authFooter">{footer}</div>
+      <button className="primaryButton" onClick={onAction}>{actionLabel}</button>
     </div>
   );
 }
 
-function Select({ label, value, onChange, items, labelKey = 'name' }) {
+function RolePicker({ roleKey, setRoleKey }) {
   return (
-    <label className="selectBox">
-      <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Select</option>
-        {items.map((item) => (
-          <option key={item.id} value={item.id}>
-            #{item.id} {item[labelKey] || item.title || item.name || item.status}
-          </option>
+    <label className="rolePicker">
+      <span>Preview role</span>
+      <select value={roleKey} onChange={(event) => setRoleKey(event.target.value)}>
+        {Object.entries(roleProfiles).map(([key, role]) => (
+          <option value={key} key={key}>{role.label}</option>
         ))}
       </select>
     </label>
   );
 }
 
-function DataTable({ title, rows, columns }) {
+function AppShell({
+  profile,
+  roleKey,
+  setRoleKey,
+  activePage,
+  setActivePage,
+  visibleNav,
+  can,
+  theme,
+  setTheme,
+  sidebarOpen,
+  setSidebarOpen,
+  logout
+}) {
+  const activeMeta = navItems.find((item) => item.id === activePage) || navItems[0];
+
+  function navigate(id) {
+    setActivePage(id);
+    setSidebarOpen(false);
+  }
+
   return (
-    <section className="panel tablePanel">
-      <div className="panelHeader">
-        <h2>{title}</h2>
+    <div className="productShell">
+      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="brand">
+          <div className="brandMark">X</div>
+          <div>
+            <strong>Xplore</strong>
+            <span>{profile.label}</span>
+          </div>
+        </div>
+        <nav aria-label="Primary navigation">
+          {visibleNav.map(({ id, label, icon: Icon }) => (
+            <button className={activePage === id ? 'navItem active' : 'navItem'} onClick={() => navigate(id)} key={id}>
+              <Icon size={17} />
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="entitlementPanel">
+          <span>Entitlements</span>
+          <strong>{profile.entitlements.length}</strong>
+        </div>
+      </aside>
+
+      <section className="workspace">
+        <header className="topbar">
+          <button className="iconButton mobileOnly" onClick={() => setSidebarOpen(true)} aria-label="Open navigation"><Menu size={18} /></button>
+          <div>
+            <p className="eyebrow">Role-based experience</p>
+            <h1>{activeMeta.label}</h1>
+          </div>
+          <div className="topActions">
+            <div className="searchBox"><Search size={16} /><input aria-label="Search" placeholder="Search opportunities, people, learning" /></div>
+            <RolePicker roleKey={roleKey} setRoleKey={setRoleKey} />
+            <ThemeButton theme={theme} setTheme={setTheme} />
+            <button className="iconButton" onClick={logout} aria-label="Logout"><LogOut size={18} /></button>
+          </div>
+        </header>
+        <main className="pageCanvas">
+          <PageRouter activePage={activePage} can={can} profile={profile} />
+        </main>
+      </section>
+      {sidebarOpen && <button className="scrim" onClick={() => setSidebarOpen(false)} aria-label="Close navigation" />}
+    </div>
+  );
+}
+
+function PageRouter({ activePage, can, profile }) {
+  const access = {
+    opportunities: ENTITLEMENTS.VIEW_JOBS,
+    learning: ENTITLEMENTS.VIEW_LEARNING,
+    resume: ENTITLEMENTS.BUILD_RESUME,
+    profile: ENTITLEMENTS.VIEW_PROFILE,
+    notifications: ENTITLEMENTS.VIEW_NOTIFICATIONS,
+    admin: ENTITLEMENTS.ADMIN_ACCESS,
+    analytics: ENTITLEMENTS.VIEW_ANALYTICS,
+    security: ENTITLEMENTS.MANAGE_SECURITY,
+    components: ENTITLEMENTS.VIEW_BLUEPRINT,
+    blueprint: ENTITLEMENTS.VIEW_BLUEPRINT
+  };
+
+  if (!can(access[activePage])) {
+    return <AccessDenied entitlement={access[activePage]} />;
+  }
+
+  const pages = {
+    dashboard: <Dashboard profile={profile} />,
+    opportunities: <OpportunityExplorer can={can} />,
+    learning: <LearningHub />,
+    resume: <ResumeBuilder />,
+    profile: <ProfileManagement />,
+    notifications: <NotificationCenter />,
+    admin: <AdminSuite />,
+    analytics: <AnalyticsPage />,
+    security: <SecurityCenter />,
+    components: <ComponentLibrary />,
+    blueprint: <Blueprint />,
+    settings: <SettingsPage />
+  };
+
+  return pages[activePage] || pages.dashboard;
+}
+
+function Dashboard({ profile }) {
+  const kpis = [
+    ['Applications Submitted', '128', '+18%', FileCheck2],
+    ['Active Opportunities', '42', '+9%', BriefcaseBusiness],
+    ['Learning Progress', '76%', '+12%', BookOpen],
+    ['Profile Completion', '92%', '+4%', UserRound]
+  ];
+
+  return (
+    <div className="pageStack">
+      <section className="heroBand">
+        <div>
+          <p className="eyebrow">Good afternoon</p>
+          <h2>{profile.title}</h2>
+          <p>Personalized actions, analytics, and recommendations are dynamically composed from your entitlements.</p>
+        </div>
+        <div className="heroStats">
+          <span>Match score</span>
+          <strong>94%</strong>
+        </div>
+      </section>
+      <section className="kpiGrid">
+        {kpis.map(([label, value, delta, Icon]) => (
+          <article className="kpiCard" key={label}>
+            <Icon size={19} />
+            <span>{label}</span>
+            <strong>{value}</strong>
+            <small>{delta}</small>
+          </article>
+        ))}
+      </section>
+      <section className="dashboardGrid">
+        <Panel title="Analytics" icon={BarChart3}><Charts /></Panel>
+        <Panel title="Activity Feed" icon={Activity}><ActivityFeed /></Panel>
+        <Panel title="Quick Actions" icon={Sparkles}><QuickActions /></Panel>
+      </section>
+    </div>
+  );
+}
+
+function OpportunityExplorer({ can }) {
+  return (
+    <div className="pageStack">
+      <section className="filterBar">
+        {['Location', 'Experience', 'Industry', 'Skills', 'Salary', 'Work Type'].map((filter) => <button key={filter}>{filter}</button>)}
+      </section>
+      <section className="opportunityGrid">
+        {opportunities.map((job) => (
+          <article className="opportunityCard" key={job.title}>
+            <div className="companyLogo">{job.logo}</div>
+            <div>
+              <span>{job.company}</span>
+              <h3>{job.title}</h3>
+              <p>{job.salary} · {job.location} · {job.type}</p>
+            </div>
+            <div className="skillRow">{job.skills.map((skill) => <span key={skill}>{skill}</span>)}</div>
+            <div className="matchRail"><span style={{ width: `${job.match}%` }} /></div>
+            <div className="cardFooter">
+              <strong>{job.match}% match</strong>
+              <div>
+                <button>Save</button>
+                {can(ENTITLEMENTS.APPLY_JOBS) ? <button className="primaryButton small">Apply Now</button> : <button disabled>Restricted</button>}
+              </div>
+            </div>
+          </article>
+        ))}
+      </section>
+    </div>
+  );
+}
+
+function LearningHub() {
+  return (
+    <div className="pageStack">
+      <section className="learningHero">
+        <div>
+          <p className="eyebrow">AI recommendations</p>
+          <h2>Build the skills that unlock your next opportunity.</h2>
+        </div>
+        <Sparkles size={44} />
+      </section>
+      <section className="courseGrid">
+        {courses.map((course) => (
+          <article className="courseCard" key={course.title}>
+            <div className="badge">{course.badge}</div>
+            <h3>{course.title}</h3>
+            <p>{course.level}</p>
+            <Progress value={course.progress} />
+          </article>
+        ))}
+      </section>
+      <Panel title="Learning Paths" icon={BookOpen}>
+        <div className="timeline">
+          {['Skill assessment', 'Curated courses', 'Certification', 'Internal mobility match'].map((step) => <span key={step}>{step}</span>)}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function ResumeBuilder() {
+  return (
+    <div className="resumeLayout">
+      <Panel title="Resume Builder" icon={FileText}>
+        <div className="templateGrid">
+          {['Executive', 'Modern ATS', 'Technical', 'Consulting'].map((template) => <button key={template}>{template}</button>)}
+        </div>
+        <div className="dragList">
+          {['Summary', 'Experience', 'Projects', 'Skills', 'Certifications'].map((section) => <div key={section}>{section}<span>Drag</span></div>)}
+        </div>
+      </Panel>
+      <Panel title="ATS Scoring" icon={Gauge}>
+        <div className="scoreCircle">88</div>
+        <p>AI suggestions recommend adding measurable outcomes, cloud keywords, and recent certifications.</p>
+        <button className="primaryButton">Export PDF</button>
+      </Panel>
+    </div>
+  );
+}
+
+function ProfileManagement() {
+  return (
+    <div className="profileGrid">
+      {['Personal Information', 'Education', 'Experience', 'Skills', 'Certifications', 'Documents', 'Preferences', 'Privacy Settings'].map((section) => (
+        <article className="profileTile" key={section}>
+          <Check size={17} />
+          <span>{section}</span>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function NotificationCenter() {
+  return (
+    <Panel title="Notification Center" icon={Bell}>
+      <div className="notificationList">
+        {notifications.map((item) => (
+          <article className={`notification ${item.tone}`} key={item.type}>
+            <strong>{item.type}</strong>
+            <p>{item.text}</p>
+          </article>
+        ))}
       </div>
-      <div className="tableWrap">
-        <table>
-          <thead>
-            <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
-          </thead>
-          <tbody>
-            {rows.slice(0, 8).map((row) => (
-              <tr key={row.id}>
-                {columns.map((column) => <td key={column}>{String(row[column] ?? '')}</td>)}
-              </tr>
-            ))}
-            {!rows.length && (
-              <tr><td colSpan={columns.length}>No records</td></tr>
-            )}
-          </tbody>
-        </table>
+    </Panel>
+  );
+}
+
+function AdminSuite() {
+  return (
+    <div className="adminGrid">
+      {['Global Dashboard', 'User Management', 'Entitlement Management', 'Organization Management', 'Platform Configuration', 'Audit Logs'].map((item) => (
+        <article className="adminCard" key={item}>
+          <Building2 size={20} />
+          <h3>{item}</h3>
+          <p>Govern roles, policies, workflows, and operational controls.</p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function AnalyticsPage() {
+  return (
+    <div className="pageStack">
+      <section className="dashboardGrid">
+        <Panel title="Bar Chart" icon={BarChart3}><BarChart /></Panel>
+        <Panel title="Line Chart" icon={Activity}><LineChart /></Panel>
+        <Panel title="Funnel" icon={Gauge}><Funnel /></Panel>
+      </section>
+      <Panel title="Activity Heatmap" icon={Grid3X3}><Heatmap /></Panel>
+    </div>
+  );
+}
+
+function SecurityCenter() {
+  return (
+    <div className="securityGrid">
+      {['MFA enforcement', 'Risk signals', 'Device trust', 'Audit monitoring', 'Access reviews', 'Recovery policy'].map((item) => (
+        <article className="securityCard" key={item}>
+          <ShieldCheck size={18} />
+          <span>{item}</span>
+          <strong>Healthy</strong>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function SettingsPage() {
+  return (
+    <div className="settingsGrid">
+      {['Profile Settings', 'Security Settings', 'Theme Configuration', 'Language Selection', 'Notification Preferences', 'Privacy Controls'].map((item) => (
+        <Panel title={item} icon={Settings} key={item}>
+          <p>Enterprise-ready controls with accessible forms, toggles, and save states.</p>
+        </Panel>
+      ))}
+    </div>
+  );
+}
+
+function ComponentLibrary() {
+  return (
+    <div className="pageStack">
+      <Panel title="Reusable Component Library" icon={Grid3X3}>
+        <div className="componentGrid">
+          {componentInventory.map((item) => <span key={item}>{item}</span>)}
+        </div>
+      </Panel>
+      <Panel title="States" icon={Sparkles}>
+        <div className="stateGrid">
+          <span className="state success">Success</span>
+          <span className="state loading">Loading</span>
+          <span className="state error">Error</span>
+          <span className="state">Empty</span>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function Blueprint() {
+  const deliverables = [
+    ['Information Architecture', 'Auth, Workspace, Opportunities, Learning, Resume, Profile, Admin, Analytics, Settings'],
+    ['User Journey Flows', 'Discover opportunity, learn skills, build resume, apply, interview, track progress'],
+    ['Navigation Structure', 'Role-filtered sidebar, global search, contextual quick actions'],
+    ['Frontend Folder Structure', 'src/components, src/features, src/layouts, src/routes, src/data, src/styles'],
+    ['Component Hierarchy', 'AppShell > Sidebar/Topbar > EntitlementRoute > Feature Pages > Reusable Components'],
+    ['Mobile Screens', 'Bottom-safe navigation, stacked cards, compact filters, collapsible modules'],
+    ['Tablet Screens', 'Two-column workspace, persistent toolbar, adaptive cards'],
+    ['Desktop Screens', 'Full sidebar, rich analytics grid, split detail panels'],
+    ['Design System', 'Tokens for color, radius, spacing, elevation, typography, motion'],
+    ['Role-Based Navigation', 'Every item checks entitlement before rendering'],
+    ['Entitlement Framework', 'Show, hide, restrict action, or render access denied'],
+    ['Responsive Layouts', 'Mobile-first CSS grid with progressive enhancement'],
+    ['Wireframes', 'Auth flow, dashboard, explorer, learning, resume, admin, settings'],
+    ['High-Fidelity UI Mockups', 'Current screens are styled as production-quality interactive mockups']
+  ];
+
+  return (
+    <div className="blueprintGrid">
+      {deliverables.map(([title, body]) => (
+        <article className="blueprintCard" key={title}>
+          <h3>{title}</h3>
+          <p>{body}</p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function Panel({ title, icon: Icon, children }) {
+  return (
+    <section className="panel">
+      <div className="panelHeader">
+        <h2><Icon size={18} /> {title}</h2>
+        <ChevronRight size={17} />
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Charts() {
+  return (
+    <div className="chartBars">
+      {[64, 82, 45, 76, 58, 91].map((height, index) => <span style={{ height: `${height}%` }} key={index} />)}
+    </div>
+  );
+}
+
+function BarChart() {
+  return <div className="chartBars tall">{[42, 71, 54, 88, 66, 92, 73].map((height, index) => <span style={{ height: `${height}%` }} key={index} />)}</div>;
+}
+
+function LineChart() {
+  return <div className="lineChart"><span /><span /><span /><span /></div>;
+}
+
+function Funnel() {
+  return <div className="funnel">{['Applied', 'Screened', 'Interview', 'Offer', 'Hired'].map((item, index) => <span style={{ width: `${100 - index * 13}%` }} key={item}>{item}</span>)}</div>;
+}
+
+function Heatmap() {
+  return <div className="heatmap">{Array.from({ length: 56 }, (_, index) => <span className={`level${index % 4}`} key={index} />)}</div>;
+}
+
+function ActivityFeed() {
+  return (
+    <div className="feed">
+      {['Applied to Principal Product Engineer', 'Completed AI Product Strategy', 'Resume ATS score improved to 88', 'Interview invitation received'].map((item) => <p key={item}>{item}</p>)}
+    </div>
+  );
+}
+
+function QuickActions() {
+  return (
+    <div className="quickActions">
+      {['Apply Now', 'Explore Opportunities', 'Continue Learning', 'Update Resume'].map((item) => <button key={item}>{item}</button>)}
+    </div>
+  );
+}
+
+function Progress({ value }) {
+  return <div className="progress"><span style={{ width: `${value}%` }} /></div>;
+}
+
+function AccessDenied({ entitlement }) {
+  return (
+    <section className="accessDenied">
+      <Lock size={34} />
+      <h2>Access denied</h2>
+      <p>This page requires the entitlement <strong>{entitlement}</strong>. Switch roles or request access from an administrator.</p>
+    </section>
+  );
+}
+
+function ThemeButton({ theme, setTheme }) {
+  return (
+    <button className="iconButton themeButton" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">
+      {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+    </button>
+  );
+}
+
+function HeroIllustration() {
+  return (
+    <section className="heroIllustration" aria-label="Career growth illustration">
+      <div className="orbit one"><Globe2 size={24} /></div>
+      <div className="orbit two"><BookOpen size={24} /></div>
+      <div className="orbit three"><Fingerprint size={24} /></div>
+      <div className="glassDevice">
+        <span />
+        <h3>Career mobility graph</h3>
+        <div className="miniChart"><i /><i /><i /><i /></div>
       </div>
     </section>
   );
