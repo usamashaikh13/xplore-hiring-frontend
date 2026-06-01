@@ -211,7 +211,11 @@ const emptyData = {
   recruitments: [],
   offers: [],
   events: [],
-  slots: []
+  slots: [],
+  interviewers: [],
+  availability: [],
+  jobTemplates: [],
+  expiryAlerts: []
 };
 
 function App() {
@@ -238,7 +242,7 @@ function App() {
 
   async function refreshBackend() {
     const nextStatus = { recruitment: 'offline', interviewer: 'offline' };
-    const [dashboard, analytics, candidates, jobs, applications, recruitments, offers, events, slots] = await Promise.all([
+    const [dashboard, analytics, candidates, jobs, applications, recruitments, offers, events, slots, interviewers, availability, jobTemplates, expiryAlerts] = await Promise.all([
       api(recruitmentBase, '/api/dashboard/summary').then((value) => {
         nextStatus.recruitment = 'online';
         return value;
@@ -253,9 +257,13 @@ function App() {
       api(interviewerBase, '/api/slots').then((value) => {
         nextStatus.interviewer = 'online';
         return value;
-      }).catch(() => [])
+      }).catch(() => []),
+      api(interviewerBase, '/api/interviewers').catch(() => []),
+      api(interviewerBase, '/api/availability').catch(() => []),
+      api(recruitmentBase, '/api/job-templates').catch(() => []),
+      api(recruitmentBase, '/api/offers/expiry-alerts').catch(() => [])
     ]);
-    setData({ dashboard, analytics, candidates, jobs, applications, recruitments, offers, events, slots });
+    setData({ dashboard, analytics, candidates, jobs, applications, recruitments, offers, events, slots, interviewers, availability, jobTemplates, expiryAlerts });
     setBackendStatus(nextStatus);
   }
 
@@ -720,22 +728,64 @@ function BackendOperations({ data, runBackendAction }) {
     meetingLink: 'https://meet.example.com/xplore',
     status: 'AVAILABLE'
   });
+  const [availability, setAvailability] = useState({
+    interviewerId: '1',
+    dayOfWeek: 'MONDAY',
+    startTime: '10:00:00',
+    endTime: '12:00:00',
+    timezone: 'Asia/Kolkata'
+  });
+  const [template, setTemplate] = useState({
+    name: 'Java Backend Template',
+    department: 'Engineering',
+    employmentType: 'Full-time',
+    minExperience: '3',
+    maxExperience: '7',
+    requiredSkills: 'Java, Spring Boot, SQL',
+    description: 'Reusable backend hiring role template',
+    salaryRange: '18-28 LPA'
+  });
+  const [lookup, setLookup] = useState({
+    duplicateEmail: candidate.email,
+    duplicatePhone: candidate.phone,
+    skills: 'Java, Spring Boot',
+    minExperience: '3',
+    round: 'L1',
+    candidateEmail: candidate.email,
+    interviewerEmail: interviewer.email
+  });
   const [selection, setSelection] = useState({
     candidateId: '',
     jobId: '',
     applicationId: '',
     recruitmentId: '',
-    offerId: ''
+    offerId: '',
+    interviewerId: '',
+    slotId: '',
+    availabilityId: '',
+    templateId: ''
   });
   const [timeline, setTimeline] = useState(null);
   const [prepPacket, setPrepPacket] = useState(null);
+  const [lookupResult, setLookupResult] = useState(null);
 
   function split(value) {
     return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
   }
 
+  function requireRecord(record, name) {
+    if (!record?.id) {
+      throw new Error(`Select or create a ${name} first`);
+    }
+    return record;
+  }
+
   const selectedApplication = data.applications.find((item) => item.id === Number(selection.applicationId));
   const selectedRecruitment = data.recruitments.find((item) => item.id === Number(selection.recruitmentId));
+  const selectedOffer = data.offers.find((item) => item.id === Number(selection.offerId));
+  const selectedInterviewer = data.interviewers.find((item) => item.id === Number(selection.interviewerId));
+  const selectedSlot = data.slots.find((item) => item.id === Number(selection.slotId));
+  const selectedTemplate = data.jobTemplates.find((item) => item.id === Number(selection.templateId));
 
   async function createCandidate() {
     const created = await api(recruitmentBase, '/api/candidates', {
@@ -748,6 +798,22 @@ function BackendOperations({ data, runBackendAction }) {
       })
     });
     setSelection((current) => ({ ...current, candidateId: created.id }));
+  }
+
+  async function updateCandidate() {
+    const target = requireRecord(data.candidates.find((item) => item.id === Number(selection.candidateId)) || data.candidates[0], 'candidate');
+    await api(recruitmentBase, `/api/candidates/${target.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...target,
+        phone: target.phone || candidate.phone,
+        currentDesignation: target.currentDesignation || candidate.currentDesignation,
+        yearsExperience: Number(target.yearsExperience || candidate.yearsExperience),
+        skills: Array.isArray(target.skills) ? target.skills : split(candidate.skills),
+        tags: Array.isArray(target.tags) ? target.tags : split(candidate.tags),
+        source: target.source || candidate.source
+      })
+    });
   }
 
   async function createJob() {
@@ -766,6 +832,22 @@ function BackendOperations({ data, runBackendAction }) {
     setSelection((current) => ({ ...current, jobId: created.id }));
   }
 
+  async function updateJob() {
+    const target = requireRecord(data.jobs.find((item) => item.id === Number(selection.jobId)) || data.jobs[0], 'job');
+    await api(recruitmentBase, `/api/jobs/${target.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...target,
+        requiredSkills: Array.isArray(target.requiredSkills) ? target.requiredSkills : split(job.requiredSkills),
+        minExperience: Number(target.minExperience || job.minExperience),
+        maxExperience: Number(target.maxExperience || job.maxExperience),
+        headcount: Number(target.headcount || job.headcount),
+        hiringManagerId: target.hiringManagerId || 1,
+        recruiterId: target.recruiterId || 10
+      })
+    });
+  }
+
   async function createInterviewer() {
     const created = await api(interviewerBase, '/api/interviewers', {
       method: 'POST',
@@ -776,6 +858,27 @@ function BackendOperations({ data, runBackendAction }) {
       })
     });
     setSlot((current) => ({ ...current, interviewerId: created.id, interviewerName: created.name }));
+  }
+
+  async function updateInterviewer() {
+    const target = requireRecord(selectedInterviewer || data.interviewers[0], 'interviewer');
+    await api(interviewerBase, `/api/interviewers/${target.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...target,
+        name: target.name,
+        phone: target.phone || interviewer.phone,
+        designation: target.designation || interviewer.designation,
+        department: target.department || interviewer.department,
+        yearsExperience: Number(target.yearsExperience || interviewer.yearsExperience),
+        technicalSkills: Array.isArray(target.technicalSkills) ? target.technicalSkills : split(interviewer.technicalSkills)
+      })
+    });
+  }
+
+  async function deleteInterviewer() {
+    const target = requireRecord(selectedInterviewer || data.interviewers[0], 'interviewer');
+    await api(interviewerBase, `/api/interviewers/${target.id}`, { method: 'DELETE' });
   }
 
   async function createSlot() {
@@ -790,12 +893,59 @@ function BackendOperations({ data, runBackendAction }) {
     });
   }
 
+  async function createAvailability() {
+    const created = await api(interviewerBase, '/api/availability', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...availability,
+        interviewerId: Number(availability.interviewerId)
+      })
+    });
+    setSelection((current) => ({ ...current, availabilityId: created.id }));
+  }
+
+  async function deleteAvailability() {
+    const target = requireRecord(data.availability.find((item) => item.id === Number(selection.availabilityId)) || data.availability[0], 'availability block');
+    await api(interviewerBase, `/api/availability/${target.id}`, { method: 'DELETE' });
+  }
+
+  async function createTemplate() {
+    const created = await api(recruitmentBase, '/api/job-templates', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...template,
+        minExperience: Number(template.minExperience),
+        maxExperience: Number(template.maxExperience),
+        requiredSkills: split(template.requiredSkills)
+      })
+    });
+    setSelection((current) => ({ ...current, templateId: created.id }));
+  }
+
+  async function createJobFromTemplate() {
+    const target = requireRecord(selectedTemplate || data.jobTemplates[0], 'job template');
+    const created = await api(recruitmentBase, `/api/job-templates/${target.id}/jobs`, {
+      method: 'POST',
+      body: JSON.stringify({
+        title: `${target.name || template.name} Opening`,
+        location: job.location,
+        headcount: Number(job.headcount),
+        status: 'OPEN',
+        hiringManagerId: 1,
+        recruiterId: 10
+      })
+    });
+    setSelection((current) => ({ ...current, jobId: created.id }));
+  }
+
   async function createApplication() {
+    const targetCandidate = requireRecord(data.candidates.find((item) => item.id === Number(selection.candidateId)) || data.candidates[0], 'candidate');
+    const targetJob = requireRecord(data.jobs.find((item) => item.id === Number(selection.jobId)) || data.jobs[0], 'job');
     const created = await api(recruitmentBase, '/api/applications', {
       method: 'POST',
       body: JSON.stringify({
-        candidateId: Number(selection.candidateId || data.candidates[0]?.id),
-        jobId: Number(selection.jobId || data.jobs[0]?.id),
+        candidateId: targetCandidate.id,
+        jobId: targetJob.id,
         source: 'Xplore Operations',
         ownerRecruiterId: 10,
         screeningNotes: 'Created from backend operations workspace'
@@ -805,14 +955,29 @@ function BackendOperations({ data, runBackendAction }) {
   }
 
   async function updateApplicationStage(stage) {
-    await api(recruitmentBase, `/api/applications/${selection.applicationId}/stage`, {
+    const target = requireRecord(selectedApplication || data.applications[0], 'application');
+    await api(recruitmentBase, `/api/applications/${target.id}/stage`, {
       method: 'PATCH',
       body: JSON.stringify({ stage, notes: `Moved to ${stage} from Xplore UI` })
     });
   }
 
+  async function requestJobApproval() {
+    const target = requireRecord(data.jobs.find((item) => item.id === Number(selection.jobId)) || data.jobs[0], 'job');
+    await api(recruitmentBase, `/api/jobs/${target.id}/request-approval`, { method: 'PATCH' });
+  }
+
+  async function approveJob() {
+    const target = requireRecord(data.jobs.find((item) => item.id === Number(selection.jobId)) || data.jobs[0], 'job');
+    await api(recruitmentBase, `/api/jobs/${target.id}/approve?approverId=1`, { method: 'PATCH' });
+  }
+
+  async function closeExpiredJobs() {
+    await api(recruitmentBase, '/api/jobs/close-expired', { method: 'POST' });
+  }
+
   async function scheduleInterview() {
-    const app = selectedApplication || data.applications[0];
+    const app = requireRecord(selectedApplication || data.applications[0], 'application');
     const targetJob = data.jobs.find((item) => item.id === app?.jobId) || data.jobs[0];
     const created = await api(recruitmentBase, '/api/recruitments/schedule', {
       method: 'POST',
@@ -827,8 +992,13 @@ function BackendOperations({ data, runBackendAction }) {
     setSelection((current) => ({ ...current, recruitmentId: created.id }));
   }
 
+  async function updateRecruitmentStatus(status) {
+    const target = requireRecord(selectedRecruitment || data.recruitments[0], 'recruitment');
+    await api(recruitmentBase, `/api/recruitments/${target.id}/status?status=${status}`, { method: 'PUT' });
+  }
+
   async function submitFeedback() {
-    const rec = selectedRecruitment || data.recruitments[0];
+    const rec = requireRecord(selectedRecruitment || data.recruitments[0], 'recruitment');
     await api(interviewerBase, '/api/feedback', {
       method: 'POST',
       body: JSON.stringify({
@@ -849,7 +1019,7 @@ function BackendOperations({ data, runBackendAction }) {
   }
 
   async function createOffer() {
-    const app = selectedApplication || data.applications[0];
+    const app = requireRecord(selectedApplication || data.applications[0], 'application');
     const created = await api(recruitmentBase, '/api/offers', {
       method: 'POST',
       body: JSON.stringify({
@@ -869,16 +1039,149 @@ function BackendOperations({ data, runBackendAction }) {
   }
 
   async function updateOffer(status) {
-    await api(recruitmentBase, `/api/offers/${selection.offerId}/status?status=${status}`, { method: 'PATCH' });
+    const target = requireRecord(selectedOffer || data.offers[0], 'offer');
+    await api(recruitmentBase, `/api/offers/${target.id}/status?status=${status}`, { method: 'PATCH' });
+  }
+
+  async function updateOfferDetails() {
+    const target = requireRecord(selectedOffer || data.offers[0], 'offer');
+    await api(recruitmentBase, `/api/offers/${target.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...target,
+        notes: `${target.notes || 'Updated'} | edited from Xplore UI`
+      })
+    });
+  }
+
+  async function findDuplicateCandidates() {
+    const query = new URLSearchParams({
+      email: lookup.duplicateEmail,
+      phone: lookup.duplicatePhone
+    });
+    setLookupResult(await api(recruitmentBase, `/api/candidates/duplicates?${query}`));
+  }
+
+  async function searchInterviewers() {
+    const query = new URLSearchParams({
+      skills: lookup.skills,
+      minExperience: lookup.minExperience
+    });
+    setLookupResult(await api(interviewerBase, `/api/interviewers/search?${query}`));
+  }
+
+  async function findAvailableSlots() {
+    const query = new URLSearchParams({
+      skills: lookup.skills,
+      minExperience: lookup.minExperience,
+      round: lookup.round
+    });
+    setLookupResult(await api(interviewerBase, `/api/slots/available?${query}`));
+  }
+
+  async function bookSlot() {
+    const target = requireRecord(selectedSlot || data.slots[0], 'slot');
+    const candidateId = selection.candidateId || data.candidates[0]?.id;
+    await api(interviewerBase, `/api/slots/${target.id}/book?candidateId=${candidateId}`, { method: 'POST' });
+  }
+
+  async function rescheduleSlot() {
+    const target = requireRecord(selectedSlot || data.slots[0], 'slot');
+    await api(interviewerBase, `/api/slots/${target.id}/reschedule`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        reason: 'Rescheduled from Xplore UI'
+      })
+    });
+  }
+
+  async function updateSlotLifecycle(path, body = {}) {
+    const target = requireRecord(selectedSlot || data.slots[0], 'slot');
+    await api(interviewerBase, `/api/slots/${target.id}/${path}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body)
+    });
+  }
+
+  async function loadSlotCalendar() {
+    const target = requireRecord(selectedSlot || data.slots[0], 'slot');
+    setLookupResult(await api(interviewerBase, `/api/slots/${target.id}/calendar.ics`));
+  }
+
+  async function loadFeedback(scope) {
+    const rec = selectedRecruitment || data.recruitments[0];
+    const targetSlot = selectedSlot || data.slots[0];
+    const targetCandidate = data.candidates.find((item) => item.id === Number(selection.candidateId)) || data.candidates[0];
+    const targetInterviewer = selectedInterviewer || data.interviewers[0];
+    if ((scope === 'recruitment' && !rec?.id) || (scope === 'slot' && !targetSlot?.id) || (scope === 'candidate' && !targetCandidate?.id) || (scope === 'interviewer' && !targetInterviewer?.id)) {
+      throw new Error('Create the selected feedback record first');
+    }
+    const routes = {
+      recruitment: `/api/feedback/recruitment/${rec?.id}`,
+      candidate: `/api/feedback/candidate/${targetCandidate?.id || rec?.candidateId}`,
+      interviewer: `/api/feedback/interviewer/${targetInterviewer?.id || rec?.interviewerId}`,
+      slot: `/api/feedback/slot/${selection.slotId || rec?.interviewSlotId || targetSlot?.id}`
+    };
+    setLookupResult(await api(interviewerBase, routes[scope]));
+  }
+
+  async function loadRecruitmentsBy(scope) {
+    const targetCandidate = data.candidates.find((item) => item.id === Number(selection.candidateId)) || data.candidates[0];
+    const targetInterviewer = selectedInterviewer || data.interviewers[0];
+    const targetApplication = selectedApplication || data.applications[0];
+    const targetSlot = selectedSlot || data.slots[0];
+    if ((scope === 'candidate' && !targetCandidate?.id) || (scope === 'interviewer' && !targetInterviewer?.id) || (scope === 'application' && !targetApplication?.id) || (scope === 'slot' && !targetSlot?.id) || (scope === 'load' && !targetInterviewer?.id)) {
+      throw new Error('Create the selected record first');
+    }
+    const routes = {
+      candidate: `/api/recruitments/candidate/${targetCandidate?.id}`,
+      interviewer: `/api/recruitments/interviewer/${targetInterviewer?.id}`,
+      application: `/api/recruitments/application/${targetApplication?.id}`,
+      slot: `/api/recruitments/slot/${targetSlot?.id}`,
+      load: `/api/recruitments/load/${targetInterviewer?.id}`
+    };
+    setLookupResult(await api(recruitmentBase, routes[scope]));
+  }
+
+  async function sendCandidateEmail() {
+    await api(interviewerBase, '/api/email/candidate', {
+      method: 'POST',
+      body: JSON.stringify({
+        candidateEmail: lookup.candidateEmail,
+        candidateName: candidate.name,
+        interviewerName: selectedInterviewer?.name || interviewer.name,
+        startTime: slot.startTime,
+        durationMinutes: 60,
+        meetingLink: slot.meetingLink
+      })
+    });
+  }
+
+  async function sendInterviewerEmail() {
+    await api(interviewerBase, '/api/email/interviewer', {
+      method: 'POST',
+      body: JSON.stringify({
+        interviewerEmail: lookup.interviewerEmail,
+        interviewerName: selectedInterviewer?.name || interviewer.name,
+        candidateName: candidate.name,
+        startTime: slot.startTime,
+        durationMinutes: 60,
+        meetingLink: slot.meetingLink
+      })
+    });
   }
 
   async function loadTimeline() {
-    const value = await api(recruitmentBase, `/api/candidates/${selection.candidateId}/timeline`);
+    const target = requireRecord(data.candidates.find((item) => item.id === Number(selection.candidateId)) || data.candidates[0], 'candidate');
+    const value = await api(recruitmentBase, `/api/candidates/${target.id}/timeline`);
     setTimeline(value);
   }
 
   async function loadPrepPacket() {
-    const value = await api(recruitmentBase, `/api/recruitments/${selection.recruitmentId}/prep-packet`);
+    const target = requireRecord(selectedRecruitment || data.recruitments[0], 'recruitment');
+    const value = await api(recruitmentBase, `/api/recruitments/${target.id}/prep-packet`);
     setPrepPacket(value);
   }
 
@@ -892,6 +1195,11 @@ function BackendOperations({ data, runBackendAction }) {
 
       <section className="dashboardGrid">
         <BackendForm title="Slot" icon={CalendarCheck} data={slot} setData={setSlot} fields={['interviewerId', 'interviewerName', 'technicalSkills', 'minYearsExperience', 'startTime', 'endTime', 'round', 'meetingLink', 'status']} action="Create Slot" onAction={() => runBackendAction('Slot created', createSlot)} />
+        <BackendForm title="Availability" icon={CalendarCheck} data={availability} setData={setAvailability} fields={['interviewerId', 'dayOfWeek', 'startTime', 'endTime', 'timezone']} action="Create Availability" onAction={() => runBackendAction('Availability created', createAvailability)} />
+        <BackendForm title="Job Template" icon={Layers3} data={template} setData={setTemplate} fields={['name', 'department', 'employmentType', 'minExperience', 'maxExperience', 'requiredSkills', 'description', 'salaryRange']} action="Create Template" onAction={() => runBackendAction('Template created', createTemplate)} />
+      </section>
+
+      <section className="dashboardGrid">
         <Panel title="Selections" icon={Fingerprint}>
           <div className="opsGrid">
             <EntitySelect label="Candidate" value={selection.candidateId} items={data.candidates} onChange={(candidateId) => setSelection({ ...selection, candidateId })} labelKey="name" />
@@ -899,19 +1207,83 @@ function BackendOperations({ data, runBackendAction }) {
             <EntitySelect label="Application" value={selection.applicationId} items={data.applications} onChange={(applicationId) => setSelection({ ...selection, applicationId })} labelKey="stage" />
             <EntitySelect label="Recruitment" value={selection.recruitmentId} items={data.recruitments} onChange={(recruitmentId) => setSelection({ ...selection, recruitmentId })} labelKey="status" />
             <EntitySelect label="Offer" value={selection.offerId} items={data.offers} onChange={(offerId) => setSelection({ ...selection, offerId })} labelKey="status" />
+            <EntitySelect label="Interviewer" value={selection.interviewerId} items={data.interviewers} onChange={(interviewerId) => setSelection({ ...selection, interviewerId })} labelKey="name" />
+            <EntitySelect label="Slot" value={selection.slotId} items={data.slots} onChange={(slotId) => setSelection({ ...selection, slotId })} labelKey="status" />
+            <EntitySelect label="Availability" value={selection.availabilityId} items={data.availability} onChange={(availabilityId) => setSelection({ ...selection, availabilityId })} labelKey="dayOfWeek" />
+            <EntitySelect label="Template" value={selection.templateId} items={data.jobTemplates} onChange={(templateId) => setSelection({ ...selection, templateId })} labelKey="name" />
           </div>
         </Panel>
         <Panel title="Workflow Actions" icon={Sparkles}>
           <div className="quickActions">
             <button onClick={() => runBackendAction('Application created', createApplication)}>Create Application</button>
             <button onClick={() => runBackendAction('Application shortlisted', () => updateApplicationStage('SHORTLISTED'))}>Shortlist</button>
+            <button onClick={() => runBackendAction('Application moved to interview', () => updateApplicationStage('INTERVIEW'))}>Move To Interview</button>
             <button onClick={() => runBackendAction('Interview scheduled', scheduleInterview)}>Schedule Interview</button>
+            <button onClick={() => runBackendAction('Recruitment completed', () => updateRecruitmentStatus('COMPLETED'))}>Complete Interview</button>
             <button onClick={() => runBackendAction('Feedback submitted', submitFeedback)}>Submit Feedback</button>
             <button onClick={() => runBackendAction('Offer created', createOffer)}>Create Offer</button>
+            <button onClick={() => runBackendAction('Offer updated', updateOfferDetails)}>Update Offer</button>
             <button onClick={() => runBackendAction('Offer sent', () => updateOffer('SENT'))}>Send Offer</button>
             <button onClick={() => runBackendAction('Offer accepted', () => updateOffer('ACCEPTED'))}>Accept Offer</button>
+            <button onClick={() => runBackendAction('Offer declined', () => updateOffer('DECLINED'))}>Decline Offer</button>
             <button onClick={() => runBackendAction('Timeline loaded', loadTimeline)}>Load Timeline</button>
             <button onClick={() => runBackendAction('Prep packet loaded', loadPrepPacket)}>Load Prep Packet</button>
+          </div>
+        </Panel>
+        <Panel title="Admin Actions" icon={ShieldCheck}>
+          <div className="quickActions">
+            <button onClick={() => runBackendAction('Candidate updated', updateCandidate)}>Update Candidate</button>
+            <button onClick={() => runBackendAction('Job updated', updateJob)}>Update Job</button>
+            <button onClick={() => runBackendAction('Job approval requested', requestJobApproval)}>Request Approval</button>
+            <button onClick={() => runBackendAction('Job approved', approveJob)}>Approve Job</button>
+            <button onClick={() => runBackendAction('Expired jobs closed', closeExpiredJobs)}>Close Expired Jobs</button>
+            <button onClick={() => runBackendAction('Job created from template', createJobFromTemplate)}>Job From Template</button>
+            <button onClick={() => runBackendAction('Interviewer updated', updateInterviewer)}>Update Interviewer</button>
+            <button onClick={() => runBackendAction('Interviewer deleted', deleteInterviewer)}>Delete Interviewer</button>
+            <button onClick={() => runBackendAction('Availability deleted', deleteAvailability)}>Delete Availability</button>
+          </div>
+        </Panel>
+      </section>
+
+      <section className="dashboardGrid">
+        <Panel title="Slot Lifecycle" icon={CalendarCheck}>
+          <div className="quickActions">
+            <button onClick={() => runBackendAction('Slot booked', bookSlot)}>Book Slot</button>
+            <button onClick={() => runBackendAction('Slot rescheduled', rescheduleSlot)}>Reschedule Slot</button>
+            <button onClick={() => runBackendAction('Slot cancelled', () => updateSlotLifecycle('cancel', { reason: 'Cancelled from Xplore UI' }))}>Cancel Slot</button>
+            <button onClick={() => runBackendAction('Slot no-show marked', () => updateSlotLifecycle('no-show'))}>Mark No Show</button>
+            <button onClick={() => runBackendAction('Slot declined', () => updateSlotLifecycle('decline', { reason: 'Declined from Xplore UI' }))}>Decline Slot</button>
+            <button onClick={() => runBackendAction('Calendar loaded', loadSlotCalendar)}>Load .ics</button>
+          </div>
+        </Panel>
+        <Panel title="Search & Communication" icon={Search}>
+          <div className="opsGrid">
+            {Object.keys(lookup).map((field) => (
+              <label className="field" key={field}>
+                <span>{field}</span>
+                <input value={lookup[field]} onChange={(event) => setLookup({ ...lookup, [field]: event.target.value })} />
+              </label>
+            ))}
+          </div>
+          <div className="quickActions">
+            <button onClick={() => runBackendAction('Duplicates loaded', findDuplicateCandidates)}>Find Duplicates</button>
+            <button onClick={() => runBackendAction('Interviewers loaded', searchInterviewers)}>Search Interviewers</button>
+            <button onClick={() => runBackendAction('Available slots loaded', findAvailableSlots)}>Find Slots</button>
+            <button onClick={() => runBackendAction('Candidate email sent', sendCandidateEmail)}>Email Candidate</button>
+            <button onClick={() => runBackendAction('Interviewer email sent', sendInterviewerEmail)}>Email Interviewer</button>
+          </div>
+        </Panel>
+        <Panel title="Read Models" icon={FileText}>
+          <div className="quickActions">
+            <button onClick={() => runBackendAction('Feedback by recruitment loaded', () => loadFeedback('recruitment'))}>Feedback: Recruitment</button>
+            <button onClick={() => runBackendAction('Feedback by candidate loaded', () => loadFeedback('candidate'))}>Feedback: Candidate</button>
+            <button onClick={() => runBackendAction('Feedback by interviewer loaded', () => loadFeedback('interviewer'))}>Feedback: Interviewer</button>
+            <button onClick={() => runBackendAction('Feedback by slot loaded', () => loadFeedback('slot'))}>Feedback: Slot</button>
+            <button onClick={() => runBackendAction('Recruitments by candidate loaded', () => loadRecruitmentsBy('candidate'))}>Recruitments: Candidate</button>
+            <button onClick={() => runBackendAction('Recruitments by interviewer loaded', () => loadRecruitmentsBy('interviewer'))}>Recruitments: Interviewer</button>
+            <button onClick={() => runBackendAction('Recruitments by app loaded', () => loadRecruitmentsBy('application'))}>Recruitments: App</button>
+            <button onClick={() => runBackendAction('Recruitments by slot loaded', () => loadRecruitmentsBy('slot'))}>Recruitments: Slot</button>
+            <button onClick={() => runBackendAction('Interviewer load loaded', () => loadRecruitmentsBy('load'))}>Interviewer Load</button>
           </div>
         </Panel>
       </section>
@@ -923,12 +1295,18 @@ function BackendOperations({ data, runBackendAction }) {
         <DataTable title="Recruitments" rows={data.recruitments} columns={['id', 'candidateId', 'interviewerId', 'interviewSlotId', 'status']} />
         <DataTable title="Offers" rows={data.offers} columns={['id', 'applicationId', 'candidateId', 'status']} />
         <DataTable title="Slots" rows={data.slots} columns={['id', 'interviewerName', 'round', 'status', 'bookedCandidateId']} />
+        <DataTable title="Interviewers" rows={data.interviewers} columns={['id', 'name', 'email', 'yearsExperience']} />
+        <DataTable title="Availability" rows={data.availability} columns={['id', 'interviewerId', 'dayOfWeek', 'startTime', 'endTime']} />
+        <DataTable title="Job Templates" rows={data.jobTemplates} columns={['id', 'name', 'department', 'employmentType']} />
+        <DataTable title="Expiry Alerts" rows={data.expiryAlerts} columns={['id', 'candidateId', 'jobId', 'status']} />
+        <DataTable title="Webhook Events" rows={data.events} columns={['id', 'eventType', 'aggregateType', 'aggregateId']} />
       </section>
 
-      {(timeline || prepPacket) && (
+      {(timeline || prepPacket || lookupResult) && (
         <section className="dashboardGrid">
           <JsonPanel title="Candidate Timeline" value={timeline} />
           <JsonPanel title="Prep Packet" value={prepPacket} />
+          <JsonPanel title="Lookup Result" value={lookupResult} />
         </section>
       )}
     </div>
